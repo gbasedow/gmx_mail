@@ -1,0 +1,13 @@
+{
+  "domain": "gmx_mail",
+  "name": "GMX Mail",
+  "codeowners": ["@gbasedow"],
+  "config_flow": true,
+  "documentation": "https://github.com/gbasedow/gmx_mail",
+  "integration_type": "service",
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://github.com/gbasedow/gmx_mail/issues",
+  "loggers": ["imapclient"],
+  "requirements": ["imapclient==4.3.0"],
+  "version": "0.1.0"
+}

@@ -13,6 +13,13 @@
 | 9 | 2026-11-20 | Menschliche Freigabe über ha-mcp „Tool Security Policies (user approval)“; ha-mcp-Read-Only-Modus nicht verwenden. | Read-Only-Modus deaktiviert `ha_call_service` komplett. |
 | 10 | 2026-11-20 | M0-Ergebnisse in SPEC.md übernommen: `NOOP` nach > 5 min Leerlauf, ein Reconnect mit Wiederholung nur für lesende Aktionen, IDLE-Erneuerung Default 24 min, nie `CLOSE` auf Read-Write-Mailboxen, COPYUID getaggt oder ungetaggt, Größenprüfung gegen `APPENDLIMIT`, Suchfallback für alle Textkriterien. | GMX trennt ruhende Verbindungen nach ≈ 30 min; Index ≈ 30 s verzögert (auch SUBJECT); Probe-Review fand implizites EXPUNGE durch `CLOSE`. Vom Nutzer freigegeben. |
 
+| 11 | 2026-11-20 | Validierung mit `probatio` statt `voluptuous`. | HA-Core (2026.10/11) nutzt `probatio` (API-kompatibel) in `config_validation` und den Core-Integrationen `imap`/`smtp`. **Vorschlag M1, Freigabe offen.** |
+| 12 | 2026-11-20 | Limits im Options-Flow nur absenkbar: Empfänger je Mail 1–10, Versand/Tag 1–20, Löschen/Tag 1–200 (Voreinstellung = Maximum). | SPEC nennt die Werte als Limits; eine Anhebung per Option würde die Schutzwirkung aushebeln. **Vorschlag M1, Freigabe offen.** |
+| 13 | 2026-11-20 | Rechtestufe R ist Pflicht (Options-Flow lehnt Auswahl ohne „Lesen“ ab). | Alle O/D/S-Aktionen arbeiten mit Referenzen aus Leseaktionen. **Vorschlag M1, Freigabe offen.** |
+| 14 | 2026-11-20 | `send_mode=any` nur mit Allowlist-Eintrag `*`; `*` umgekehrt nur im Modus `any`. | Umsetzung von SPEC §5 Nr. 2 („nur durch ausdrückliches Setzen von `*`“). **Vorschlag M1, Freigabe offen.** |
+| 15 | 2026-11-20 | Setup meldet sich einmal an (Capabilities, Ordner), die Arbeitsverbindung bleibt danach bis 10 min Leerlauf offen und wird bei Bedarf neu aufgebaut. Auth-Fehler → Reauth + Repair; Netz-/TLS-Fehler → `ConfigEntryNotReady`. | Früher Fehlerhinweis statt erst bei der ersten Aktion. **Vorschlag M1, Freigabe offen.** |
+| 16 | 2026-11-20 | Testsuite in zwei Läufe geteilt: `tests/gmx_mail` (HA-Plugin) und `tests/probe` (`-p no:homeassistant`). | Das HA-Testplugin blockiert Sockets und prüft auf übrig gebliebene Threads; der Fake-IMAP-Server der Probe-Tests braucht beides. |
+
 - `sent_copy_mode` Standard `append`: GMX legt per SMTP keine Gesendet-Kopie an (M0, Lauf 3).
 
 ## Offen

@@ -177,7 +177,7 @@ Die Allowlist ist die einzige harte technische Grenze gegen Datenabfluss; Token 
    Dovecot GMX-ähnlich konfigurieren: Capabilities wie in M0 gemessen (`docs/probe-2026-11-20-v4.json`, inkl. `APPENDLIMIT=29360128`,
    MOVE, UIDPLUS, SPECIAL-USE, LIST-STATUS, SORT), ohne CONDSTORE/QRESYNC, QUOTA, ESEARCH, UTF8=ACCEPT; Ordner `Gesendet`, `Entwürfe`,
    `Gelöscht`, `Spamverdacht` mit SPECIAL-USE; kurzes Idle-Timeout (z. B. 60 s), um Reconnect und IDLE-Erneuerung zu testen.
-   Für Offline-Tests ohne Docker dient der Fake-IMAP-Server aus `tests/fake_imap.py` als Vorbild.
+   Für Offline-Tests ohne Docker dient der Fake-IMAP-Server aus `tests/probe/fake_imap.py` als Vorbild.
 3. **Lint/Validierung:** ruff, mypy (strict für `client/` und `guard.py`), `hassfest` (GitHub Action `home-assistant/actions/hassfest`),
    HACS-Validierung (`hacs/action`, `category: integration`), `hacs.json` mit `homeassistant: "2026.11.0"`.
 4. **Quality Scale:** `quality_scale.yaml` pflegen. Ziel: alle Bronze-Regeln und von Silber/Gold u. a. `action-setup`, `action-exceptions`,

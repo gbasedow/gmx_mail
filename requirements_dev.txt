@@ -1,0 +1,7 @@
+# Development and test dependencies (Linux, Python 3.14).
+# pytest-homeassistant-custom-component pins homeassistant and pytest; 0.13.375 ships HA 2026.10.4
+# (newest release as of 20.11.2026 - there is none for 2026.11 yet).
+pytest-homeassistant-custom-component==0.13.375
+imapclient==4.3.0
+ruff>=0.17
+mypy>=2.4

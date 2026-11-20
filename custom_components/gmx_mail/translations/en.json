@@ -1,0 +1,197 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect GMX mailbox",
+        "description": "Use an app password. POP3/IMAP access must be enabled in the GMX web mailer (E-Mail settings > POP3/IMAP).",
+        "data": {
+          "email": "Email address",
+          "password": "App password"
+        },
+        "data_description": {
+          "email": "The full GMX address; it is also the user name.",
+          "password": "Create it under Account > Login & security > App passwords. Required with two-factor authentication."
+        },
+        "sections": {
+          "server": {
+            "name": "Server settings",
+            "description": "Only change these if GMX changes its servers.",
+            "data": {
+              "imap_host": "IMAP server",
+              "imap_port": "IMAP port",
+              "imap_security": "IMAP encryption",
+              "smtp_host": "SMTP server",
+              "smtp_port": "SMTP port",
+              "smtp_security": "SMTP encryption"
+            }
+          }
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate GMX mailbox",
+        "description": "GMX rejected the login for {account}. Either the app password is no longer valid, or GMX switched POP3/IMAP access off after a period of inactivity. Re-enable POP3/IMAP in the web mailer if necessary, then enter the app password.",
+        "data": {
+          "password": "App password"
+        }
+      },
+      "reconfigure": {
+        "title": "Change server settings",
+        "description": "Server settings for {account}. The connection is tested with the stored credentials.",
+        "data": {
+          "imap_host": "IMAP server",
+          "imap_port": "IMAP port",
+          "imap_security": "IMAP encryption",
+          "smtp_host": "SMTP server",
+          "smtp_port": "SMTP port",
+          "smtp_security": "SMTP encryption"
+        }
+      }
+    },
+    "error": {
+      "invalid_email": "Please enter a complete email address.",
+      "invalid_auth_or_imap_disabled": "Login rejected. Check the app password and make sure POP3/IMAP access is enabled in the GMX web mailer (GMX switches it off automatically after longer inactivity).",
+      "smtp_auth_failed": "IMAP works, but the SMTP login was rejected.",
+      "cannot_connect": "Cannot reach the mail server.",
+      "tls_error": "The encrypted connection failed (TLS or certificate error).",
+      "unknown": "Unexpected error, see the log."
+    },
+    "abort": {
+      "already_configured": "This mailbox is already configured.",
+      "reauth_successful": "Reauthentication was successful.",
+      "reconfigure_successful": "The server settings were updated."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "GMX mailbox options",
+        "description": "Permissions limit what actions (for example called by an AI assistant) may do. The allowlist is the only hard limit against sending data to third parties.",
+        "sections": {
+          "permissions_section": {
+            "name": "Permissions",
+            "data": {
+              "permissions": "Allowed action levels",
+              "allow_permanent_delete": "Allow permanent deletion"
+            },
+            "data_description": {
+              "permissions": "Read is always required. Organize = flags, move, folders, drafts. Delete = move to trash. Send = send, reply, forward.",
+              "allow_permanent_delete": "Also needs the Delete level and a confirmation token for each call."
+            }
+          },
+          "sending_section": {
+            "name": "Sending",
+            "data": {
+              "send_mode": "Send mode",
+              "allowlist": "Allowed recipients",
+              "allow_reply_to_sender": "Allow replies to the original sender",
+              "sent_copy_mode": "Copy in the Sent folder"
+            },
+            "data_description": {
+              "send_mode": "Off: no sending. Allowlist: only listed recipients. Any recipient: requires the entry * in the list.",
+              "allowlist": "Exact addresses or *@domain. An empty list blocks sending. Enter * only together with the mode 'Any recipient'.",
+              "allow_reply_to_sender": "Replies to the sender of a message even if the sender is not on the allowlist.",
+              "sent_copy_mode": "GMX does not store a copy of messages sent via SMTP, so the integration appends one."
+            }
+          },
+          "limits_section": {
+            "name": "Limits",
+            "description": "Limits can only be lowered below the built-in maximum.",
+            "data": {
+              "max_recipients": "Maximum recipients per message",
+              "max_send_per_day": "Maximum messages sent per day",
+              "max_delete_per_day": "Maximum deletions per day"
+            }
+          },
+          "connection_section": {
+            "name": "Connection",
+            "data": {
+              "poll_interval": "Polling interval",
+              "idle_enabled": "Use IMAP IDLE (push)",
+              "idle_renew_minutes": "Renew IDLE after"
+            },
+            "data_description": {
+              "idle_renew_minutes": "GMX closes idle connections after about 30 minutes; at most 25 minutes."
+            }
+          },
+          "folders_section": {
+            "name": "Special folders",
+            "description": "Leave empty for automatic detection (SPECIAL-USE, then folder name).",
+            "data": {
+              "folder_sent": "Sent",
+              "folder_drafts": "Drafts",
+              "folder_trash": "Trash",
+              "folder_junk": "Spam"
+            }
+          },
+          "privacy_section": {
+            "name": "Privacy and audit",
+            "data": {
+              "event_include_headers": "Include sender and subject in events",
+              "audit_retention_days": "Keep audit log for"
+            },
+            "data_description": {
+              "event_include_headers": "Event data ends up in the logbook and recorder and can reach an AI assistant."
+            }
+          }
+        }
+      }
+    },
+    "error": {
+      "invalid_permission": "Unknown permission level.",
+      "read_required": "The Read level is required.",
+      "invalid_send_mode": "Unknown send mode.",
+      "invalid_allowlist_entry": "Invalid allowlist entry. Use exact addresses, *@domain or *.",
+      "wildcard_requires_any": "The entry * is only allowed with the send mode 'Any recipient'.",
+      "any_requires_wildcard": "The send mode 'Any recipient' must be confirmed by adding the entry * to the allowlist.",
+      "invalid_sent_copy_mode": "Unknown mode for the Sent copy.",
+      "out_of_range": "A value is outside the allowed range."
+    }
+  },
+  "selector": {
+    "security": {
+      "options": {
+        "ssl": "SSL/TLS (implicit)",
+        "starttls": "STARTTLS"
+      }
+    },
+    "permissions": {
+      "options": {
+        "read": "Read",
+        "organize": "Organize",
+        "delete": "Delete (trash)",
+        "send": "Send"
+      }
+    },
+    "send_mode": {
+      "options": {
+        "off": "Off",
+        "allowlist": "Allowlist only",
+        "any": "Any recipient"
+      }
+    },
+    "sent_copy_mode": {
+      "options": {
+        "append": "Always append a copy",
+        "auto": "Append only if missing",
+        "none": "No copy"
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_auth_or_imap_disabled": {
+      "message": "GMX rejected the login. The app password may be invalid or POP3/IMAP access may have been switched off."
+    },
+    "cannot_connect": {
+      "message": "Cannot connect to the GMX mail server."
+    },
+    "tls_error": {
+      "message": "The encrypted connection to the GMX mail server failed."
+    }
+  },
+  "issues": {
+    "imap_possibly_disabled": {
+      "title": "GMX login rejected for {account}",
+      "description": "GMX rejected the login. GMX switches POP3/IMAP access off automatically after a longer period without use, and then reports the same error as for a wrong password.\n\n1. Log in to the GMX web mailer.\n2. Open E-Mail settings > POP3/IMAP and allow POP3 and IMAP access (GMX asks for a security confirmation).\n3. If the app password was deleted, create a new one under Account > Login & security > App passwords.\n4. Then reauthenticate the integration under Settings > Devices & services."
+    }
+  }
+}

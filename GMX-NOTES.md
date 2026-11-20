@@ -78,8 +78,8 @@ python3 tools/gmx_probe.py > gmx_probe_result.json
 python3 tools/gmx_probe.py --send-self-test > gmx_probe_result_send.json   # optional, sendet genau 1 Mail an sich selbst
 ```
 
-Stand der Prüfung des Skripts (v3d): Hilfsfunktionen (`tests/test_gmx_probe_helpers.py`) und der Ablauf (`tests/test_gmx_probe_flow.py`,
-vier Capability-Profile) wurden gegen einen lokalen Fake-IMAP-Server (`tests/fake_imap.py`) mit gestubbtem SMTP geprüft (Kommandosyntax, Parsing, Aufräumen, keine Ausgabe von Zugangsdaten). **Nicht** geprüft ist das
+Stand der Prüfung des Skripts (v3d): Hilfsfunktionen (`tests/probe/test_gmx_probe_helpers.py`) und der Ablauf (`tests/probe/test_gmx_probe_flow.py`,
+vier Capability-Profile) wurden gegen einen lokalen Fake-IMAP-Server (`tests/probe/fake_imap.py`) mit gestubbtem SMTP geprüft (Kommandosyntax, Parsing, Aufräumen, keine Ausgabe von Zugangsdaten). **Nicht** geprüft ist das
 Verhalten gegen den echten GMX-Server; dort können Abweichungen auftreten (z. B. Fehlertexte, Antwortformate).
 
 Das Skript:
@@ -102,7 +102,7 @@ Manuelle Zusatztests (nicht vom Skript abgedeckt):
   `docs/probe-2026-11-20-idle.json` sind nicht im Repository; eingecheckt ist nur `docs/probe-2026-11-20-v4.json` (Lauf 3).
 - Probe v3d (nach Lauf 3): `CLOSE` auf echten Ordnern (Papierkorb, Posteingang, Gesendet) durch `UNSELECT` ersetzt – `CLOSE` hätte dort
   fremde, von anderen Clients mit `\Deleted` markierte Mails endgültig gelöscht. Prüfung offline gegen einen Fake-IMAP-Server
-  (`tests/test_gmx_probe_flow.py`). Ob in den Läufen 1–3 dadurch fremde Mails verloren gingen, ist nicht feststellbar
+  (`tests/probe/test_gmx_probe_flow.py`). Ob in den Läufen 1–3 dadurch fremde Mails verloren gingen, ist nicht feststellbar
   (nur wenn ein anderer Client zu dem Zeitpunkt Mails als `\Deleted` markiert, aber nicht expunged hatte – bei GMX-Webmailer/App unüblich).
 - TLS-Kette: `mail.gmx.net` → Telekom Security OV RSA CA 26A → TLS RSA Root 2023 (cross-signiert von T-TeleSec GlobalRoot Class 3).
   Python mit leerem Windows-Zertifikatsspeicher scheitert; `certifi` löst es. Verifikation wird nie abgeschaltet.

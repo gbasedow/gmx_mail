@@ -39,7 +39,7 @@ wurde nicht gefunden. „Vollständiges Management“ bedeutet hier: alles, was 
 | 25 | SEARCH | Verhalten bei `CHARSET UTF-8`, BODY/TEXT, Groß-/Kleinschreibung, Performance: keine Quelle. Warnbeispiel: Strato-IMAP lieferte seit Mitte 2026 für jede SEARCH ein leeres Ergebnis (imap-mcp-server Issue #138) | – | U | **ja** | ✔ **Geklärt (Lauf 2):** GMX indexiert neue Nachrichten verzögert. In frisch per APPEND angelegten Mails traten Textsuchen erst nach ca. 30 s zuverlässig auf (bei 5 s und 15 s wechselhaft 0/1 Treffer, bei 31 s alle Treffer). Im Bestand (3418 Mails im Posteingang) funktioniert die Serversuche einwandfrei und schnell: FROM 1,1 s, SUBJECT 1,2 s, BODY 0,5 s, TEXT 1,5 s, SINCE 0,04 s. Konsequenz: neue Mails sind kurz nach Eingang per Textsuche evtl. nicht auffindbar → Fallback über FETCH/Header oder Datumssuche. |
 | 26 | Flags | 2009: `PERMANENTFLAGS (\Answered \Flagged \Draft \Deleted \Seen)`, also kein `\*` = keine eigenen Keywords | bugs.kde.org 204653 | D (alt) | **ja** | ✔ `PERMANENTFLAGS (\Answered \Flagged \Draft \Deleted \Seen \*)`; eigenes Keyword `haprobe` per STORE gesetzt und per `SEARCH KEYWORD` gefunden. Die Angabe von 2009 ist veraltet. |
 | 27 | Quota | Keine QUOTA-Capability -> Speicherfüllstand per IMAP nicht abfragbar | siehe Zeile 11 | D | ja | ✔ bestätigt: keine QUOTA-Capability. |
-| 28 | MOVE/COPY | `UID MOVE` und `UID COPY` in Testordner funktionieren. `COPYUID` kam bei MOVE **nicht** im getaggten OK (Probe v3 prüft, ob er als ungetaggtes `* OK [COPYUID …]` kommt). | Probe 20.11.2026 | – | ✔ | Verhalten: nach MOVE Ziel-UID ggf. per `HEADER Message-ID` ermitteln. |
+| 28 | MOVE/COPY | `UID MOVE` und `UID COPY` in Testordner funktionieren. `COPYUID` kommt bei COPY im getaggten OK, bei MOVE **nicht** im getaggten OK, sondern ungetaggt (`* OK [COPYUID …]`). Belastbar belegt nur durch **einen** Messpunkt (Lauf 3, `trash_move`): Der Wert `move_to_b` war wegen eines imaplib-Effekts nicht aussagekräftig (Response-Codes getaggter Antworten landen im selben Speicher und werden nicht geleert; in v3d behoben). | Probe 20.11.2026 | – | ✔ (1 Messpunkt) | COPYUID aus getaggter **oder** ungetaggter Antwort lesen; fehlt beides, Ziel-UID per Message-ID bzw. FETCH-Header-Abgleich ermitteln. |
 | 29 | Flags/Datumssuche | `SEEN`, `UNSEEN`, `LARGER`, `SMALLER`, `SINCE`, `KEYWORD` funktionieren; `SORT (REVERSE DATE)` funktioniert. | Probe 20.11.2026 | – | ✔ | |
 | 30 | Verbindungsaufbau | Login 0,4 s; TLS-Vertrauen unter Windows mit python.org-Python ohne `certifi` nicht gegeben (Zwischenzertifikate fehlen im Windows-Speicher). | Probe, tls-diagnose | – | ✔ | Integration läuft in HA (certifi vorhanden). |
 | 31 | IDLE | IDLE funktioniert (`+ idling`). Nach **1812 s (≈ 30 min)** ohne Aktivität sendet GMX `* BYE timeout` und trennt. | Probe Lauf 2 | – | ✔ | IDLE spätestens alle 20–25 min neu starten; gilt auch für Hauptverbindung ohne Aktivität (NOOP). |
@@ -78,8 +78,8 @@ python3 tools/gmx_probe.py > gmx_probe_result.json
 python3 tools/gmx_probe.py --send-self-test > gmx_probe_result_send.json   # optional, sendet genau 1 Mail an sich selbst
 ```
 
-Stand der Prüfung des Skripts: Syntax, Hilfsfunktionen (`tests/test_gmx_probe_helpers.py`) und der Ablauf wurden gegen einen lokalen
-Fake-IMAP-Server mit gestubbtem SMTP geprüft (Kommandosyntax, Parsing, Aufräumen, keine Ausgabe von Zugangsdaten). **Nicht** geprüft ist das
+Stand der Prüfung des Skripts (v3d): Hilfsfunktionen (`tests/test_gmx_probe_helpers.py`) und der Ablauf (`tests/test_gmx_probe_flow.py`,
+vier Capability-Profile) wurden gegen einen lokalen Fake-IMAP-Server (`tests/fake_imap.py`) mit gestubbtem SMTP geprüft (Kommandosyntax, Parsing, Aufräumen, keine Ausgabe von Zugangsdaten). **Nicht** geprüft ist das
 Verhalten gegen den echten GMX-Server; dort können Abweichungen auftreten (z. B. Fehlertexte, Antwortformate).
 
 Das Skript:
@@ -98,7 +98,12 @@ Manuelle Zusatztests (nicht vom Skript abgedeckt):
 
 ## 4. Ergebnis M0 (Lauf vom 20.11.2026, Probe v2)
 
-- Datei: `docs/probe-2026-11-20.json` (bereinigt: ohne Postfachzähler und UIDVALIDITY).
+- Datei: `docs/probe-2026-11-20.json` (bereinigt: ohne Postfachzähler und UIDVALIDITY). **Hinweis 20.11.2026:** Diese Datei und
+  `docs/probe-2026-11-20-idle.json` sind nicht im Repository; eingecheckt ist nur `docs/probe-2026-11-20-v4.json` (Lauf 3).
+- Probe v3d (nach Lauf 3): `CLOSE` auf echten Ordnern (Papierkorb, Posteingang, Gesendet) durch `UNSELECT` ersetzt – `CLOSE` hätte dort
+  fremde, von anderen Clients mit `\Deleted` markierte Mails endgültig gelöscht. Prüfung offline gegen einen Fake-IMAP-Server
+  (`tests/test_gmx_probe_flow.py`). Ob in den Läufen 1–3 dadurch fremde Mails verloren gingen, ist nicht feststellbar
+  (nur wenn ein anderer Client zu dem Zeitpunkt Mails als `\Deleted` markiert, aber nicht expunged hatte – bei GMX-Webmailer/App unüblich).
 - TLS-Kette: `mail.gmx.net` → Telekom Security OV RSA CA 26A → TLS RSA Root 2023 (cross-signiert von T-TeleSec GlobalRoot Class 3).
   Python mit leerem Windows-Zertifikatsspeicher scheitert; `certifi` löst es. Verifikation wird nie abgeschaltet.
 - Alle Kernfunktionen (Ordner, APPEND, MOVE, COPY, Flags, Keywords, UID EXPUNGE, parallele Verbindungen, SMTP-Login) funktionieren.

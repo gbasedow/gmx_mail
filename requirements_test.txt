@@ -1,0 +1,4 @@
+# Offline-Pruefungen fuer tools/ und tests/ (M1 ergaenzt pytest-homeassistant-custom-component)
+pytest>=9
+ruff>=0.17
+mypy>=2.4

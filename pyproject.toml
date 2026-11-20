@@ -1,0 +1,29 @@
+[project]
+name = "gmx_mail"
+version = "0.0.0"
+requires-python = ">=3.14"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tools", "tests"]
+addopts = "-ra --strict-markers"
+markers = ["integration: needs docker compose (greenmail/dovecot)"]
+
+[tool.ruff]
+line-length = 140
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "BLE", "SIM", "RUF", "PL", "SLF"]
+ignore = ["PLR2004", "PLR0913", "S101", "S603", "S607", "RUF001", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+# Standalone stdlib live-probe script: style rules relaxed, correctness rules (F, B, E9, S except listed) stay on.
+"tools/gmx_probe.py" = ["PLR0911", "PLR0912", "PLR0915", "C901", "S110", "PLW0108", "PLW2901", "PLC0415", "E501", "SIM"]
+"tests/*" = ["S", "PLR0911", "PLR0912", "PLR0915", "C901"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+warn_unused_ignores = true
+mypy_path = ["tools", "tests"]

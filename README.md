@@ -14,7 +14,8 @@ durch Claude über den ha-mcp-Server. **Status: Planungsphase – noch kein Code
 | `docs/probe-2026-11-20*.json` | Bereinigte Ergebnisse der M0-Live-Tests (Lauf 1–3) |
 | `tools/gmx_probe.py` | Live-Prüfskript gegen ein GMX-Testkonto (gibt keine Mailinhalte aus) |
 | `custom_components/gmx_mail/` | Platz für die Integration (noch leer) |
-| `tests/` | Tests; bisher nur Hilfsfunktionen des Probe-Skripts (`pytest -q tests`) |
+| `tests/` | Tests des Probe-Skripts: Hilfsfunktionen und Ablauf gegen einen Fake-IMAP-Server (`py -m pytest -q`) |
+| `pyproject.toml`, `requirements_test.txt` | Konfiguration für pytest, ruff, mypy |
 
 Reihenfolge: zuerst `tools/gmx_probe.py` gegen ein Testkonto laufen lassen (siehe `GMX-NOTES.md`, Abschnitt 3),
 Ergebnisse eintragen, dann mit Meilenstein M1 beginnen.

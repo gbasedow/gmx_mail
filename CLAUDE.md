@@ -22,7 +22,10 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
 - Stand: 20.11.2026. **Noch keine Integration.** M0 (Live-Probe v2 gegen GMX) ist gelaufen; Ergebnisse stehen in `GMX-NOTES.md`
   (Spalte „Ergebnis“, Abschnitt 4) und `docs/probe-2026-11-20.json`. Kernfunktionen bestätigt (UIDPLUS, MOVE, Keywords, UTF-7-Ordner, 4 parallele Verbindungen).
 - **Geklärt in Lauf 2:** Textsuche = Indexverzögerung ≈ 30 s bei neuen Mails (Bestand schnell); IDLE/ruhende Verbindung wird nach ≈ 30 min getrennt
-  (`* BYE timeout`); `COPYUID` kommt bei MOVE ungetaggt (`* OK [COPYUID …]`).
+  (`* BYE timeout`); `COPYUID` kommt bei MOVE ungetaggt (`* OK [COPYUID …]`; nur ein belastbarer Messpunkt, siehe GMX-NOTES Zeile 28).
+- Probe-Skript v3d (20.11.2026): `CLOSE` auf echten Ordnern durch `UNSELECT` ersetzt (sonst implizites EXPUNGE fremder `\Deleted`-Mails);
+  Offline-Tests gegen Fake-IMAP-Server in `tests/`. Eingecheckt ist nur `docs/probe-2026-11-20-v4.json`.
+- SPEC.md ist um die M0-Ergebnisse ergänzt (Reconnect/NOOP, Suchfallback, COPYUID, APPENDLIMIT, Testcontainer).
 - **Geklärt in Lauf 3:** SMTP legt **keine** Kopie in `Gesendet` an → Standard `sent_copy_mode=append`; `MOVE` nach `Gelöscht` funktioniert.
 - **Noch offen:** IMAP-Abschaltfrist (Langzeitbeobachtung). Weitere Live-Läufe sind für M1 nicht nötig.
 - M1 (Gerüst, Config-Flow, Verbindung, Reconnect) kann starten. `search` (M2) mit Indexverzögerungs-Fallback entwerfen.
@@ -92,7 +95,9 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
 
 - Bibliotheken: `imapclient` (Arbeitsverbindung, Executor, ein `asyncio.Lock`), `aioimaplib` (IDLE-Watcher),
   `smtplib` + `email` (policy.default) aus der Standardbibliothek. Kompatibilität mit HA `package_constraints` prüfen.
-- Höchstens zwei IMAP-Verbindungen je Konto (IDLE + Arbeit). Lazy-Connect, Backoff 5 s bis 15 min mit Jitter, IDLE alle 25 min erneuern.
+- Höchstens zwei IMAP-Verbindungen je Konto (IDLE + Arbeit). Lazy-Connect, Backoff 5 s bis 15 min mit Jitter, IDLE spätestens alle 25 min
+  erneuern (Default 24). Nach > 5 min Leerlauf `NOOP`; bei Verbindungsabbruch ein Reconnect, Wiederholung nur für lesende Aktionen.
+- Nie `CLOSE` nach Read-Write-`SELECT` (implizites EXPUNGE), sondern `UNSELECT`.
 - Aktionen in `async_setup` registrieren, Pflichtfeld `config_entry_id`, `SupportsResponse.ONLY` (Lesen) bzw. `OPTIONAL` (Schreiben).
   Fehler als `ServiceValidationError`/`HomeAssistantError` mit `translation_key`, nie als Fehlerfeld in der Antwort.
 - Antwort-Envelope mit Budget 24 KB, Paginierung, `truncated`, `content_trust: "untrusted_external_email"`.
@@ -103,8 +108,8 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
 ## 8. Befehle (nach M1 anpassen)
 
 ```
-pip install -r requirements_dev.txt   # wird in M1 angelegt
-pytest -q
+pip install -r requirements_dev.txt   # wird in M1 angelegt (bis dahin: requirements_test.txt)
+pytest -q                             # unter Windows: py -m pytest -q
 pytest -m integration                 # docker compose up greenmail dovecot
 ruff check . && ruff format --check .
 mypy custom_components/gmx_mail

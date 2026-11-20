@@ -11,6 +11,7 @@
 | 7 | 2026-11-20 | Core-`smtp.send_message` wird nicht genutzt; eigener SMTP-Versand. | Nur vordefinierte Empfänger, kein CC/BCC, keine Anhänge aus beliebigen Pfaden. |
 | 8 | 2026-11-20 | Übergabe an Claude Code über Dateien (`CLAUDE.md`, `SPEC.md`, `GMX-NOTES.md`) statt eines langen Prompts. | Claude Code liest `CLAUDE.md` automatisch; Dateien sind versionierbar. |
 | 9 | 2026-11-20 | Menschliche Freigabe über ha-mcp „Tool Security Policies (user approval)“; ha-mcp-Read-Only-Modus nicht verwenden. | Read-Only-Modus deaktiviert `ha_call_service` komplett. |
+| 10 | 2026-11-20 | M0-Ergebnisse in SPEC.md übernommen: `NOOP` nach > 5 min Leerlauf, ein Reconnect mit Wiederholung nur für lesende Aktionen, IDLE-Erneuerung Default 24 min, nie `CLOSE` auf Read-Write-Mailboxen, COPYUID getaggt oder ungetaggt, Größenprüfung gegen `APPENDLIMIT`, Suchfallback für alle Textkriterien. | GMX trennt ruhende Verbindungen nach ≈ 30 min; Index ≈ 30 s verzögert (auch SUBJECT); Probe-Review fand implizites EXPUNGE durch `CLOSE`. Vom Nutzer freigegeben. |
 
 - `sent_copy_mode` Standard `append`: GMX legt per SMTP keine Gesendet-Kopie an (M0, Lauf 3).
 

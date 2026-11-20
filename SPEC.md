@@ -1,6 +1,6 @@
 # SPEC.md – Spezifikation der Integration `gmx_mail`
 
-Stand: 20.11.2026 (Recherche, noch keine Implementierung). GMX-Fakten und Unsicherheiten: `GMX-NOTES.md`.
+Stand: 20.11.2026 (Recherche + M0-Ergebnisse eingearbeitet, noch keine Implementierung). GMX-Fakten und Unsicherheiten: `GMX-NOTES.md`.
 Verbindlichkeit: Abschnitte 1–5 und 7 sind Vorgaben; Details dürfen nach M0 (Live-Test) begründet angepasst werden.
 
 ## 1. Rahmen
@@ -47,6 +47,10 @@ hacs.json  README.md  CLAUDE.md  SPEC.md  GMX-NOTES.md  tools/gmx_probe.py
 ### Config-Flow
 - Abgefragt: E-Mail und App-Passwort. Host, Ports und TLS-Modus mit Defaults (993 implizit / 587 STARTTLS) in einem einklappbaren Bereich.
 - Der Flow prüft IMAP-Login, CAPABILITY, LIST und den SMTP-Login. `unique_id` = E-Mail in Kleinschreibung.
+- TLS-Kontext über HAs `homeassistant.util.ssl.client_context()` (certifi; M0: ohne certifi scheitert die Kette unter Windows),
+  mindestens TLS 1.2, Zertifikatsprüfung nie abschaltbar.
+- Die Capabilities nach Login werden gespeichert, inkl. `APPENDLIMIT`. Fehlen `MOVE`, `UIDPLUS` oder `SPECIAL-USE`, wird nicht abgebrochen,
+  sondern gewarnt (Log + `get_status`) und die Ersatzpfade werden genutzt (M0: bei GMX alle vorhanden).
 - Fehlerschlüssel: `invalid_auth_or_imap_disabled`, `cannot_connect`, `tls_error`, `smtp_auth_failed`, `unknown`.
   Hilfetexte verweisen auf das Einschalten von POP3/IMAP und auf das App-Passwort.
 - **Reauth:** bei Auth-Fehler im Betrieb (`ConfigEntryAuthFailed`), zusätzlich Repair-Issue `imap_possibly_disabled`.
@@ -57,8 +61,15 @@ hacs.json  README.md  CLAUDE.md  SPEC.md  GMX-NOTES.md  tools/gmx_probe.py
 ### Verbindungsmanagement
 - Höchstens zwei IMAP-Verbindungen je Konto: eine für IDLE, eine für Aktionen.
 - Arbeitsverbindung: Lazy-Connect beim ersten Aufruf, Schließen nach 10 min Leerlauf. Timeouts: 30 s je Kommando, 120 s für große FETCHes.
-- IDLE alle 25 min erneuern.
+  GMX trennt ruhende Verbindungen nach ≈ 30 min (M0); eine Dauerverbindung wird nie vorausgesetzt.
+- Liegt die letzte Nutzung > 5 min zurück, vor dem eigentlichen Kommando `NOOP` als Lebenszeichen-Prüfung.
+- Socket-Fehler, EOF oder `* BYE` während einer Aktion: genau ein transparenter Reconnect; das Kommando wird **nur bei lesenden** Aktionen
+  einmal wiederholt. Schreibende Aktionen werden nicht wiederholt, sondern melden `outcome: unknown` (§5.6).
+- IDLE spätestens alle 25 min erneuern (Voreinstellung 24 min, DONE + neues IDLE). `* BYE timeout` vom Server ist ein normaler Reconnect-Anlass,
+  kein Fehlerzustand und kein Repair-Issue.
 - Reconnect mit exponentiellem Backoff 5 s bis 15 min mit Jitter. Ein Auth-Fehler stoppt die Retries und startet Reauth.
+- Mailbox verlassen nie per `CLOSE` nach Read-Write-`SELECT` (implizites EXPUNGE fremder `\Deleted`-Mails), sondern per `UNSELECT`
+  (ersatzweise `EXAMINE` eines anderen Ordners).
 - UIDVALIDITY-Wechsel macht Cursor und Referenzen ungültig.
 - Capability-abhängige Pfade: MOVE, sonst COPY + `\Deleted` + UID EXPUNGE; UID EXPUNGE nur mit UIDPLUS. Ein mailbox-weites EXPUNGE ist nie erlaubt.
 - Ordner-Erkennung: SPECIAL-USE, dann Namens-Heuristik (Gesendet/Sent, Entwürfe/Drafts, Gelöscht/Papierkorb/Trash, Spamverdacht/Spam/Junk),
@@ -83,20 +94,20 @@ Lesen: `SupportsResponse.ONLY`; Schreiben: `SupportsResponse.OPTIONAL`.
 | Aktion | Parameter (Default) | Rückgabe `data` | Stufe | Limits / Fehler |
 |---|---|---|---|---|
 | `list_folders` | `include_counts`(false) | `folders[{name, path, role, delimiter, flags, messages?, unseen?}]` | R | LIST-STATUS, falls verfügbar |
-| `search` | `folder`(INBOX), `from, to, cc, subject, text, body, since, before, seen, flagged, answered, draft, larger, smaller, keyword, uid_range`, `sort`(date_desc), `limit`(20, max 50), `cursor` | `messages[{ref, date, from, to[<=5], subject<=200, size, flags, has_attachments, snippet<=160?}]`, `page` | R | Umlaut-Suche über `CHARSET UTF-8`; bei Ablehnung Warnung + ASCII-Fallback. **M0: GMX indexiert neue Mails mit ≈ 30 s Verzögerung** (Bestandssuche schnell: 0,5–1,5 s bei ~3400 Mails). Antwort enthält `search_mode`; für Mails der letzten ~2 min zusätzlich clientseitiger Header-Abgleich per FETCH, Hinweis `index_lag` in der Antwort. Sortierung per SORT, sonst clientseitig über max. 2000 UIDs. Fehler: `folder_not_found`, `search_rejected` |
+| `search` | `folder`(INBOX), `from, to, cc, subject, text, body, since, before, seen, flagged, answered, draft, larger, smaller, keyword, uid_range`, `sort`(date_desc), `limit`(20, max 50), `cursor` | `messages[{ref, date, from, to[<=5], subject<=200, size, flags, has_attachments, snippet<=160?}]`, `page` | R | Umlaut-Suche über `CHARSET UTF-8`; bei Ablehnung Warnung + ASCII-Fallback. **M0: GMX indexiert neue Mails mit ≈ 30 s Verzögerung** (Bestandssuche schnell: 0,5–1,5 s bei ~3400 Mails). Antwort enthält `search_mode`. Die Verzögerung betrifft **alle Textkriterien** (BODY/TEXT und auch SUBJECT/FROM; Lauf 3: SUBJECT später als BODY). Fallback: Mails mit INTERNALDATE in den letzten ~2 min (max. 50) per FETCH der Header holen und nur Header-Kriterien (`from, to, cc, subject`) clientseitig prüfen; BODY/TEXT werden nicht nachgebildet, stattdessen Warnung `index_lag`. Sortierung per SORT, sonst clientseitig über max. 2000 UIDs. Fehler: `folder_not_found`, `search_rejected` |
 | `get_message` | `ref`, `format`(text\|html_as_text\|raw_headers), `max_chars`(8000, max 32000), `offset`(0), `headers`(Standardliste) | `headers{…}, body{text, chars_total, truncated, next_offset}, attachments[{part_id, filename, mime, size, inline}], auth_results?, list_unsubscribe?` | R | setzt **nicht** `\Seen` (BODY.PEEK) |
 | `get_attachment` | `ref`, `part_id`, `mode`(save\|base64), `max_bytes`(10 MB) | `{path, filename, size, sha256}` bzw. `{base64}` wenn <= 256 KB | R | speichert nur unter `/media/gmx_mail/<entry>/`, Dateiname bereinigt |
 | `get_status` | – | `{capabilities, folders_map, unseen_inbox, last_sync, idle_active, limits_used}` | R | – |
 | `get_audit_log` | `limit`(50) | `entries[…]` ohne Inhalte | R | – |
 | `set_flags` | `refs[]`, `add[]`, `remove[]` (seen, flagged, answered, `$keyword`) | `{updated:n}` | O | max. 100 Refs; Keywords nur wenn PERMANENTFLAGS `\*` enthält |
-| `move` / `copy` | `refs[]`, `target_folder` | `{moved:n, new_refs[]}` (COPYUID nur wenn geliefert; bei MOVE kam er in M0 nicht im getaggten OK, sonst Ziel-UID per Message-ID suchen) | O | max. 100; Ziel muss existieren |
+| `move` / `copy` | `refs[]`, `target_folder` | `{moved:n, new_refs[]}` (COPYUID aus getaggter **oder** ungetaggter Antwort lesen – GMX liefert ihn bei MOVE ungetaggt als `* OK [COPYUID …]`, bei COPY getaggt; `imapclient.move()` gibt ihn nicht zurück → eigener Parser. Fehlt beides: Ziel-UID per Message-ID, wegen Indexverzögerung mit FETCH-Header-Abgleich) | O | max. 100; Ziel muss existieren |
 | `mark_spam` / `mark_not_spam` | `refs[]` | `{moved:n}` | O | verschiebt nach/aus Junk; Wirkung auf GMX-Lernfilter unbestätigt |
 | `create_folder` / `rename_folder` | `name`/`path`, `parent` | `{path}` | O | Spezialordner nicht umbenennbar |
-| `save_draft` | `to, cc, bcc, subject, body_text, body_html?, in_reply_to_ref?` | `{ref}` | O | APPEND mit `\Draft` |
+| `save_draft` | `to, cc, bcc, subject, body_text, body_html?, in_reply_to_ref?` | `{ref}` | O | APPEND mit `\Draft`; Gesamtgröße <= `APPENDLIMIT` (GMX: 29 360 128 B), sonst `message_too_large` |
 | `trash` | `refs[]` | `{trashed:n}` | D | in den Papierkorb verschieben; max. 50 je Aufruf, max. 200 je Tag |
 | `delete_permanently` | `refs[]`, `confirm_token?` | ohne Token: `{preview, confirm_token, expires_in:300}`; mit Token: `{deleted:n}` | D + Option `allow_permanent_delete` | `\Deleted` + UID EXPUNGE; ohne UIDPLUS verweigert |
 | `delete_folder` | `path`, `confirm_token?` | wie oben | D | nur leere Ordner, nie Spezialordner |
-| `send_message` | `to[], cc[], bcc[], subject, body_text, body_html?, attachments[paths]?, confirm_token?` | ohne Token: Vorschau + Token; mit Token: `{message_id, sent_copy:"server"\|"appended"\|"none"}` | S | Versand-Modus + Allowlist; max. 10 Empfänger, max. 20 Mails/Tag; Anhänge nur aus `/media/gmx_mail/outbox` |
+| `send_message` | `to[], cc[], bcc[], subject, body_text, body_html?, attachments[paths]?, confirm_token?` | ohne Token: Vorschau + Token; mit Token: `{message_id, sent_copy:"appended"\|"server"\|"none"}` (Normalfall `appended`; `server` nur bei `sent_copy_mode=auto`, wenn GMX doch eine Kopie anlegt) | S | Versand-Modus + Allowlist; max. 10 Empfänger, max. 20 Mails/Tag; Anhänge nur aus `/media/gmx_mail/outbox`; Größe <= SMTP-`SIZE` und (für die Gesendet-Kopie) <= `APPENDLIMIT`, sonst `message_too_large` vor dem Versand |
 | `reply` | `ref, body_text, reply_all`(false), `quote`(true), `confirm_token?` | wie oben | S | setzt `\Answered`; In-Reply-To/References; Ziel nur bei Allowlist-Treffer oder Option `allow_reply_to_sender` |
 | `forward` | `ref, to[], comment, include_attachments`(true), `confirm_token?` | wie oben | S | Allowlist; größengeprüft |
 | `send_draft` | `ref, confirm_token?` | wie oben | S | Entwurf wird nach dem Senden entfernt |
@@ -117,6 +128,8 @@ als „search + move/flag“ auf neue Mails anwendet. Repair-Issue `server_rules
   weil Event-Daten in Logbuch und Recorder landen und über ha-mcp in den Modellkontext gelangen können.
 - **Ereignis `gmx_mail_action_executed`:** für das Audit-Log, ohne Inhalte.
 - **Repairs:** `imap_possibly_disabled`, `smtp_auth_failed`, `uidvalidity_changed`, `folder_mapping_ambiguous`, `server_rules_unavailable` (info).
+  `folder_mapping_ambiguous` nur, wenn eine Rolle mehrfach belegt ist (z. B. `Sent` neben `Gesendet`) oder SPECIAL-USE fehlt und die Heuristik
+  mehrere Kandidaten findet. Die SPECIAL-USE-Zuordnung ist in M0 bestätigt (`Entwürfe` \Drafts, `Gelöscht` \Trash, `Gesendet` \Sent, `Spamverdacht` \Junk).
 - **Diagnostics:** `async_redact_data` für Passwort, Benutzer, Adressen, Betreffs. Ausgegeben werden Capabilities, Ordner-Map, Zähler,
   letzte Fehlercodes und Options ohne Allowlist-Adressen (nur deren Anzahl).
 
@@ -161,7 +174,10 @@ Die Allowlist ist die einzige harte technische Grenze gegen Datenabfluss; Token 
    jede Aktion mit Erfolgs-, Validierungs- und Rechtefehler; PolicyEngine, Token, RateLimiter, Sanitizer (Injection-Korpus, versteckter Text, Zero-Width),
    MIME-Parser mit kaputten Strukturen und gemischten Charsets.
 2. **Integrationstests** gegen GreenMail (IMAP/SMTP mit UIDPLUS und MOVE) und Dovecot im Container (`docker-compose`, Pytest-Marker `integration`).
-   Dovecot GMX-ähnlich konfigurieren: ohne CONDSTORE und QUOTA, Ordner `Gesendet`, `Entwürfe`, `Gelöscht`, `Spamverdacht` mit SPECIAL-USE.
+   Dovecot GMX-ähnlich konfigurieren: Capabilities wie in M0 gemessen (`docs/probe-2026-11-20-v4.json`, inkl. `APPENDLIMIT=29360128`,
+   MOVE, UIDPLUS, SPECIAL-USE, LIST-STATUS, SORT), ohne CONDSTORE/QRESYNC, QUOTA, ESEARCH, UTF8=ACCEPT; Ordner `Gesendet`, `Entwürfe`,
+   `Gelöscht`, `Spamverdacht` mit SPECIAL-USE; kurzes Idle-Timeout (z. B. 60 s), um Reconnect und IDLE-Erneuerung zu testen.
+   Für Offline-Tests ohne Docker dient der Fake-IMAP-Server aus `tests/fake_imap.py` als Vorbild.
 3. **Lint/Validierung:** ruff, mypy (strict für `client/` und `guard.py`), `hassfest` (GitHub Action `home-assistant/actions/hassfest`),
    HACS-Validierung (`hacs/action`, `category: integration`), `hacs.json` mit `homeassistant: "2026.11.0"`.
 4. **Quality Scale:** `quality_scale.yaml` pflegen. Ziel: alle Bronze-Regeln und von Silber/Gold u. a. `action-setup`, `action-exceptions`,
@@ -189,13 +205,16 @@ Nach jeder Etappe: Tests grün, Kurzbericht, Freigabe abwarten.
 - **Frist der IMAP-Abschaltung** unbekannt; ob Dauer-IDLE als Nutzung zählt, ist zweifelhaft (Forum: „alle 4 Wochen“ trotz täglicher Nutzung).
   Mitigation: Reauth + Repair, ggf. regelmäßiger kurzer Login-Heartbeat (nach M0 bewerten, Sicherheit/Nutzen abwägen).
 - **APPENDLIMIT** 29360128 B (≈ 28 MiB) begrenzt Entwürfe/APPEND; `save_draft` und Anhänge darauf prüfen.
-- **Gesendet-Kopie:** GMX legt per SMTP keine an (M0, Lauf 3) → `sent_copy_mode` Standard `append` (APPEND mit `\Seen` in den `\Sent`-Ordner, Message-ID der gesendeten Mail verwenden); `auto` prüft vorher per Header-Abgleich, `none` schaltet ab. Duplikate möglich, falls GMX das Verhalten ändert.
+- **COPYUID bei MOVE:** ungetaggt, aber nur durch einen Messpunkt belegt (Lauf 3, `trash_move`; der zweite Messwert war wegen eines
+  imaplib-Effekts nicht aussagekräftig). Implementierung muss beide Varianten und das Fehlen verkraften.
+- **Expunge im Papierkorb** ungetestet (v1 löscht standardmäßig nie dauerhaft; vor M5 live prüfen).
+- **Gesendet-Kopie (erledigt):** GMX legt per SMTP keine an (M0, Lauf 3) → `sent_copy_mode` Standard `append` (APPEND mit `\Seen` in den `\Sent`-Ordner, Message-ID der gesendeten Mail verwenden); `auto` prüft vorher per Header-Abgleich, `none` schaltet ab. Duplikate möglich, falls GMX das Verhalten ändert.
 - **Versandlimits** dynamisch und unveröffentlicht; Massentests können eine Kontosperre auslösen.
 - **SEARCH:** Indexverzögerung ≈ 30 s bei neuen Mails (M0, Lauf 2); Umlaut-Suche im Bestand noch nicht mit echten Mails geprüft.
 - **Verbindungs-Timeout:** GMX trennt IDLE und ruhende Verbindungen nach ≈ 30 min (`* BYE timeout`) → IDLE alle ≤ 25 min erneuern, Reconnect-Logik. Lokale Indexierung erst in v2
   (Speicher, Datenschutz).
 - **Ordnernamen** widersprüchlich; mögliche Doppelordner aus früheren Clients (`Sent`).
-- **Eigene Keywords:** in M0 bestätigt (`PERMANENTFLAGS … \*`, Keyword gesetzt und gefunden); Prüfung zur Laufzeit bleibt.
+- **Eigene Keywords (erledigt):** in M0 bestätigt (`PERMANENTFLAGS … \*`, Keyword gesetzt und gefunden); Prüfung zur Laufzeit bleibt.
 - **ha-mcp:** keine dokumentierten Größen- und Zeitlimits für `service_response`; lange SMTP-/FETCH-Läufe können Client-Timeouts überschreiten.
 - **Parallelbetrieb** mit Core-`imap`/`smtp` auf demselben Konto belegt zusätzliche Verbindungen (Limit unbekannt, Forumsangabe: 5).
 - **Nicht geprüft:** `jgalea/mailbox-mcp`, `danieldotnl/ha-mailbox-mcp`, `dadalouis/Home-mail`; arm64-Images und Pflegezustand sonstiger Mail-MCP-Projekte.

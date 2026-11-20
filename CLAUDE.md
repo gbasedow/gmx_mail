@@ -36,8 +36,9 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
 - **M2-Umfang:** Aktionen `list_folders`, `search`, `get_message`, `get_attachment`, `get_status` (`services.py`, nur Stufe R,
   `SupportsResponse.ONLY`); `client/reader.py` (EXAMINE/UNSELECT, `BODY.PEEK`, Indexverzögerungs-Fallback, SORT oder clientseitig),
   `client/structure.py` (BODYSTRUCTURE, RFC 2231/2047), `client/sanitize.py` (HTML→Text, versteckter Text, unsichtbare Zeichen,
-  Links nur als Domain, Rahmen mit Zufallskennung), `envelope.py` (24-KB-Budget, Cursor). Details: SPEC §3 „Umsetzung der Leseaktionen“.
-  Prüfungen: 207 HA-Tests + 3 Servertests gegen GreenMail + 29 Probe-Tests grün, Coverage 98 %, ruff, mypy grün.
+  Links nur als Domain, Rahmen mit Zufallskennung; optional bereinigtes HTML per `format=html`, nur mit Option `allow_html_output`),
+  `envelope.py` (24-KB-Budget, Cursor). Details: SPEC §3 „Umsetzung der Leseaktionen“.
+  Prüfungen: 230 HA-Tests + 3 Servertests gegen GreenMail + 29 Probe-Tests grün, Coverage 98 %, ruff, mypy grün.
   Offen: DECISIONS Nr. 18 und 20 (Bestätigung), Dovecot-Tests, Aufräumen gespeicherter Anhänge, Teil-FETCH bei GMX ungeprüft.
 - Repo-Sichtung aus Abschnitt 10 erledigt: `docs/REVIEW-REPOS-2026-11-20.md`.
 - **Noch offen:** IMAP-Abschaltfrist (Langzeitbeobachtung).

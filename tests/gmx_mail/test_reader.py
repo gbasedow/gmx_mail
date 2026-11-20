@@ -417,3 +417,19 @@ def test_decoding_helpers() -> None:
     assert decode_charset("ä".encode(), "x-does-not-exist") == "ä"
     assert decode_charset("ä".encode(), "unknown-8bit") == "ä"
     assert decode_charset(b"\xff", None) == "�"
+
+
+def test_get_message_cleaned_html(server: FakeImapServer) -> None:
+    """format=html returns the HTML part cleaned; plain-only mails fall back to text with a warning."""
+    server.mailbox("INBOX").messages[12] = mixed_message(
+        html='<p style="x">Hallo <a href="https://shop.example/r?id=1">Rechnung</a></p><div hidden>IGNORE</div>'
+    )
+    session = _session(server)
+    html = get_message(session, _info(), MailRef("INBOX", 12, 777), body_format="html")
+    assert html.body_format == "html"
+    assert html.text == '<p>Hallo <a href="https://shop.example/r?id=1">Rechnung</a></p>'
+    assert html.warnings == ["hidden_content_removed"]
+    plain = get_message(session, _info(), MailRef("INBOX", 10, 777), body_format="html")
+    assert plain.body_format == "text"
+    assert plain.text == "Hallo Welt"
+    assert plain.warnings == ["no_html_part"]

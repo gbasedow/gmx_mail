@@ -125,6 +125,10 @@ def test_search_get_message_and_attachment(session: IMAPClient, folder: str) -> 
     html = get_message(session, info, ref, body_format="html_as_text")
     assert html.text == "Hallo HTML"
     assert "hidden_content_removed" in html.warnings
+    cleaned = get_message(session, info, ref, body_format="html")
+    assert cleaned.body_format == "html"
+    assert cleaned.text == "<p>Hallo <b>HTML</b></p>"
+    assert "hidden_content_removed" in cleaned.warnings
 
     part, content = get_attachment(session, info, ref, text.attachments[0]["part_id"], max_bytes=1000)
     assert content == b"%PDF-1.4 test" and part.mime == "application/pdf"

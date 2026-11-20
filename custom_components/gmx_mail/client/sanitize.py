@@ -18,6 +18,7 @@ import re
 import secrets
 import unicodedata
 from dataclasses import dataclass, field
+from html import escape
 from html.parser import HTMLParser
 from urllib.parse import urlsplit
 
@@ -220,6 +221,153 @@ def sanitize_body(text: str, *, is_html: bool) -> SanitizedText:
     if invisible:
         warnings.append("invisible_characters_removed")
     return SanitizedText(text=stripped, hidden_removed=hidden, invisible_removed=invisible, warnings=warnings)
+
+
+# --------------------------------------------------------------------------- cleaned HTML (format=html)
+
+_HTML_TAGS = frozenset(
+    {
+        "a", "abbr", "b", "blockquote", "br", "caption", "code", "dd", "del", "div", "dl", "dt", "em", "h1", "h2", "h3",
+        "h4", "h5", "h6", "hr", "i", "img", "ins", "li", "mark", "ol", "p", "pre", "s", "small", "span", "strong", "sub",
+        "sup", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "u", "ul",
+    }
+)  # fmt: skip
+_HTML_ATTRS: dict[str, frozenset[str]] = {
+    "a": frozenset({"href"}),
+    "img": frozenset({"alt"}),  # never src: remote images are tracking pixels
+    "td": frozenset({"colspan", "rowspan"}),
+    "th": frozenset({"colspan", "rowspan"}),
+    "ol": frozenset({"start"}),
+}
+_SAFE_URL_SCHEMES = ("http://", "https://", "mailto:")
+_IMPLICIT_CLOSE: dict[str, frozenset[str]] = {
+    "td": frozenset({"td", "th"}),
+    "th": frozenset({"td", "th"}),
+    "tr": frozenset({"tr", "td", "th"}),
+    "li": frozenset({"li"}),
+    "dt": frozenset({"dt", "dd"}),
+    "dd": frozenset({"dt", "dd"}),
+    "p": frozenset({"p"}),
+}
+
+
+@dataclass
+class _HtmlFrame:
+    tag: str
+    hidden: bool
+    emitted: bool
+
+
+@dataclass
+class SanitizedHtml:
+    """Cleaned HTML ready for output, plus what was changed."""
+
+    html: str
+    warnings: list[str] = field(default_factory=list)
+
+
+def _safe_url(value: str) -> str | None:
+    url = strip_invisible(value).strip()
+    compact = "".join(url.split()).lower()
+    return url if compact.startswith(_SAFE_URL_SCHEMES) else None
+
+
+class _HtmlCleaner(HTMLParser):
+    """Re-serialise HTML with an allow-list of tags and attributes; drop hidden and active content."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.out: list[str] = []
+        self.stack: list[_HtmlFrame] = []
+        self.hidden_removed = False
+        self.invisible_removed = False
+
+    def _hidden(self) -> bool:
+        return any(frame.hidden for frame in self.stack)
+
+    def _clean(self, value: str) -> str:
+        cleaned = strip_invisible(value)
+        if cleaned != value:
+            self.invisible_removed = True
+        return cleaned
+
+    def _render(self, tag: str, attrs: list[tuple[str, str | None]]) -> str:
+        allowed = _HTML_ATTRS.get(tag, frozenset())
+        parts = [tag]
+        for raw_key, raw_value in attrs:
+            key = raw_key.lower()
+            if key not in allowed or raw_value is None:
+                continue
+            value: str | None = _safe_url(raw_value) if key == "href" else raw_value
+            if value is None:
+                continue
+            parts.append(f'{key}="{escape(self._clean(value), quote=True)}"')
+        return "<" + " ".join(parts) + ">"
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = {key.lower(): value or "" for key, value in attrs}
+        hidden_context = self._hidden()
+        hides = tag in _SKIP_CONTENT or "hidden" in attributes or _style_hides(attributes.get("style", ""))
+        if tag in _VOID:
+            if not hidden_context and not hides and tag in _HTML_TAGS:
+                self.out.append(self._render(tag, attrs))
+            return
+        if hides and tag not in _SKIP_CONTENT and not hidden_context:
+            self.hidden_removed = True
+        self._close_implicit(tag)
+        emitted = not hidden_context and not hides and tag in _HTML_TAGS
+        if emitted:
+            self.out.append(self._render(tag, attrs))
+        self.stack.append(_HtmlFrame(tag=tag, hidden=hides, emitted=emitted))
+
+    def _close_implicit(self, tag: str) -> None:
+        """HTML allows omitting some end tags (``<td>a<td>b``, ``<li>a<li>b``); close them before a sibling starts."""
+        closes = _IMPLICIT_CLOSE.get(tag)
+        while closes and self.stack and self.stack[-1].tag in closes:
+            self.handle_endtag(self.stack[-1].tag)
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.handle_starttag(tag, attrs)
+        if tag not in _VOID:
+            self.handle_endtag(tag)
+
+    def handle_endtag(self, tag: str) -> None:
+        for index in range(len(self.stack) - 1, -1, -1):
+            if self.stack[index].tag == tag:
+                # Close unclosed inner elements too, so the output stays well-formed.
+                for frame in reversed(self.stack[index:]):
+                    if frame.emitted:
+                        self.out.append(f"</{frame.tag}>")
+                del self.stack[index:]
+                break
+
+    def handle_data(self, data: str) -> None:
+        if not self._hidden():
+            self.out.append(escape(self._clean(data), quote=False))
+
+    def close(self) -> None:
+        super().close()
+        for frame in reversed(self.stack):
+            if frame.emitted:
+                self.out.append(f"</{frame.tag}>")
+        self.stack.clear()
+
+
+def sanitize_html(html: str) -> SanitizedHtml:
+    """Return cleaned HTML: structure kept, scripts/comments/hidden elements/attributes outside the allow-list removed.
+
+    Full link URLs are kept (``http``, ``https``, ``mailto`` only); image sources are always removed.
+    """
+    cleaner = _HtmlCleaner()
+    cleaner.feed(html)
+    cleaner.close()
+    result = _MULTI_BLANK_RE.sub("\n\n", "".join(cleaner.out)).strip()
+    warnings = []
+    if cleaner.hidden_removed:
+        warnings.append("hidden_content_removed")
+    if cleaner.invisible_removed:
+        warnings.append("invisible_characters_removed")
+    return SanitizedHtml(html=result, warnings=warnings)
 
 
 def new_nonce() -> str:

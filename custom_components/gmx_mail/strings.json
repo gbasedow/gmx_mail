@@ -71,11 +71,13 @@
             "name": "Permissions",
             "data": {
               "permissions": "Allowed action levels",
-              "allow_permanent_delete": "Allow permanent deletion"
+              "allow_permanent_delete": "Allow permanent deletion",
+              "allow_html_output": "Allow HTML output"
             },
             "data_description": {
               "permissions": "Read is always required. Organize = flags, move, folders, drafts. Delete = move to trash. Send = send, reply, forward.",
-              "allow_permanent_delete": "Also needs the Delete level and a confirmation token for each call."
+              "allow_permanent_delete": "Also needs the Delete level and a confirmation token for each call.",
+              "allow_html_output": "Lets get_message return the message as cleaned HTML (format html): layout and full link addresses are kept; scripts, comments, hidden elements and images are removed. Off: text only."
             }
           },
           "sending_section": {
@@ -186,7 +188,8 @@
       "options": {
         "text": "Plain text (preferred)",
         "html_as_text": "HTML converted to text",
-        "raw_headers": "All headers"
+        "raw_headers": "All headers",
+        "html": "HTML (cleaned, original layout)"
       }
     },
     "attachment_mode": {
@@ -238,6 +241,9 @@
     },
     "path_not_allowed": {
       "message": "The media folder is not an allowed path in Home Assistant (allowlist_external_dirs)."
+    },
+    "html_output_disabled": {
+      "message": "HTML output is not enabled in the options of this account."
     }
   },
   "issues": {
@@ -369,7 +375,7 @@
         },
         "format": {
           "name": "Format",
-          "description": "Which part to return as text."
+          "description": "Which part to return and how: text, HTML converted to text, cleaned HTML (only if enabled in the options) or all headers."
         },
         "max_chars": {
           "name": "Maximum characters",

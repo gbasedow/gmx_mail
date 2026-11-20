@@ -122,6 +122,7 @@ get_message:
           options:
             - text
             - html_as_text
+            - html
             - raw_headers
     max_chars:
       default: 8000

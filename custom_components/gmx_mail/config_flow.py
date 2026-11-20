@@ -28,6 +28,7 @@ from .client.errors import GmxAuthError, GmxConnectionError, GmxConnectionLimitE
 from .client.imap import ServerInfo, check_imap_account
 from .client.smtp import check_smtp_login
 from .const import (
+    CONF_ALLOW_HTML_OUTPUT,
     CONF_ALLOW_PERMANENT_DELETE,
     CONF_ALLOW_REPLY_TO_SENDER,
     CONF_ALLOWLIST,
@@ -269,6 +270,7 @@ def build_options_schema(folders: list[str]) -> probatio.Schema:
             {
                 probatio.Required(CONF_PERMISSIONS): _select([p.value for p in Permission], CONF_PERMISSIONS, multiple=True),
                 probatio.Required(CONF_ALLOW_PERMANENT_DELETE): BooleanSelector(),
+                probatio.Required(CONF_ALLOW_HTML_OUTPUT): BooleanSelector(),
             },
             False,
         ),

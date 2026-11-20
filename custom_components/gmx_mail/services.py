@@ -42,6 +42,7 @@ from .client.imap import ImapSession
 from .client.reader import MailRef, SearchQuery, get_attachment, get_message, list_folders, search, unseen_count
 from .client.sanitize import clean_inline, frame_untrusted, new_nonce
 from .const import (
+    CONF_ALLOW_HTML_OUTPUT,
     CONF_ALLOWLIST,
     CONF_MAX_DELETE_PER_DAY,
     CONF_MAX_RECIPIENTS,
@@ -120,7 +121,7 @@ GET_MESSAGE_SCHEMA = vol.Schema(
     {
         **_ENTRY,
         vol.Required("ref"): REF_SCHEMA,
-        vol.Optional("format", default="text"): vol.In(["text", "html_as_text", "raw_headers"]),
+        vol.Optional("format", default="text"): vol.In(["text", "html_as_text", "html", "raw_headers"]),
         vol.Optional("max_chars", default=DEFAULT_MAX_CHARS): vol.All(vol.Coerce(int), vol.Range(min=100, max=MAX_MAX_CHARS)),
         vol.Optional("offset", default=0): vol.All(vol.Coerce(int), vol.Range(min=0)),
         vol.Optional("headers", default=list): vol.All(cv.ensure_list, vol.Length(max=10), [vol.Match(_HEADER_NAME_RE)]),
@@ -286,6 +287,9 @@ def _search_job(session: ImapSession, **kwargs: Any) -> Any:
 
 async def _get_message(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
     entry = _entry(hass, call, Permission.READ)
+    if call.data["format"] == "html" and not entry.runtime_data.options.get(CONF_ALLOW_HTML_OUTPUT):
+        # A person enables HTML output in the options; a mail (or the model) cannot switch it on.
+        raise ServiceValidationError(translation_domain=DOMAIN, translation_key="html_output_disabled")
     info = entry.runtime_data.server_info
     ref = _ref(call.data["ref"])
     content = await _run(

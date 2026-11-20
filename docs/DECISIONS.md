@@ -25,6 +25,7 @@
 | 21 | 2026-11-20 | Anhänge unter `<Medienordner>/gmx_mail/<entry_id>/<uid>_<part>_<Name>`; Medienordner aus der HA-Konfiguration statt fest `/media`. | Auf HAOS ist das `/media`, in Containern `config/media`. Präfix verhindert Namenskollisionen. Aufräumen alter Dateien offen (M7). |
 | 22 | 2026-11-20 | Lesetests gegen GreenMail im Container (lokal per `docker compose`, CI per Service-Container); Dovecot noch nicht. | GreenMail deckt den Lesepfad ohne SPECIAL-USE/UNSELECT ab; die GMX-nahe Dovecot-Konfiguration lohnt sich ab M4 (MOVE, Flags, SPECIAL-USE). |
 | 23 | 2026-11-20 | Teil-FETCH mit Rückfall auf vollständigen FETCH, wenn imapclient die Antwort nicht parsen kann. | GreenMail liefert formal fehlerhafte Teil-FETCH-Antworten; Verhalten von GMX ungeprüft. |
+| 24 | 2026-11-20 | `get_message` kann zusätzlich bereinigtes HTML im ursprünglichen Layout liefern (`format=html`); erlaubt nur, wenn die Option „HTML-Ausgabe erlauben“ (`allow_html_output`, Voreinstellung aus) eingeschaltet ist. | Wunsch des Nutzers (Ausgabe im ursprünglichen Format, per Schalter). Ein Mensch schaltet frei, nicht das Modell oder eine Mail. Bereinigt statt unverändert, damit versteckter Text und aktive Inhalte nicht ankommen (Entscheidung des Nutzers). Vollständige Link-URLs bleiben erhalten. |
 
 - `sent_copy_mode` Standard `append`: GMX legt per SMTP keine Gesendet-Kopie an (M0, Lauf 3).
 

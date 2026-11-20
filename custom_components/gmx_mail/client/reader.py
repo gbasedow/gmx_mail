@@ -32,7 +32,7 @@ from .errors import (
 )
 from .folders import FolderMap, parse_folder_list
 from .imap import CONNECTION_ERRORS, ImapSession, ServerInfo
-from .sanitize import clean_inline, link_domain, sanitize_body
+from .sanitize import clean_inline, link_domain, sanitize_body, sanitize_html
 from .structure import PartInfo, attachments, find_text_parts, parse_bodystructure
 
 SUMMARY_HEADERS = ("DATE", "FROM", "TO", "CC", "SUBJECT", "MESSAGE-ID")
@@ -52,7 +52,7 @@ MAX_HEADER_VALUE = 500
 _PART_ID_RE = re.compile(r"^[1-9]\d{0,3}(?:\.[1-9]\d{0,3}){0,9}$")
 
 type SortOrder = Literal["date_desc", "date_asc"]
-type BodyFormat = Literal["text", "html_as_text", "raw_headers"]
+type BodyFormat = Literal["text", "html_as_text", "html", "raw_headers"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -560,23 +560,30 @@ def get_message(
         warnings: list[str] = []
 
         if body_format == "raw_headers":
-            text = decode_charset(bytes(raw_header or b""), "utf-8")
-            sanitized = sanitize_body(text, is_html=False)
-            chosen = "raw_headers"
+            sanitized = sanitize_body(decode_charset(bytes(raw_header or b""), "utf-8"), is_html=False)
+            body_text, chosen = sanitized.text, "raw_headers"
+            warnings += sanitized.warnings
         else:
-            part = (html or plain) if body_format == "html_as_text" else (plain or html)
+            part = (html or plain) if body_format in ("html_as_text", "html") else (plain or html)
             if part is None:
-                text, chosen = "", "none"
+                body_text, chosen = "", "none"
                 warnings.append("no_text_body")
-                sanitized = sanitize_body("", is_html=False)
             else:
                 limit = MAX_TEXT_PART_BYTES if part.size > MAX_TEXT_PART_BYTES else None
                 if limit:
                     warnings.append("body_truncated_at_source")
-                text = _part_text(session, ref.uid, part, max_bytes=limit)
-                chosen = "html_as_text" if part.mime == "text/html" else "text"
-                sanitized = sanitize_body(text, is_html=part.mime == "text/html")
-        warnings += sanitized.warnings
+                raw_text = _part_text(session, ref.uid, part, max_bytes=limit)
+                if body_format == "html" and part.mime == "text/html":
+                    cleaned = sanitize_html(raw_text)
+                    body_text, chosen = cleaned.html, "html"
+                    warnings += cleaned.warnings
+                else:
+                    if body_format == "html":
+                        warnings.append("no_html_part")  # plain-text-only mail: returned as text
+                    sanitized = sanitize_body(raw_text, is_html=part.mime == "text/html")
+                    body_text = sanitized.text
+                    chosen = "html_as_text" if part.mime == "text/html" else "text"
+                    warnings += sanitized.warnings
 
     headers: dict[str, Any] = {
         "from": _addresses(msg, "from"),
@@ -608,7 +615,7 @@ def get_message(
     flags = [f.decode("ascii", "replace") if isinstance(f, bytes) else str(f) for f in data.get(b"FLAGS", ())]
     return MessageContent(
         headers=headers,
-        text=sanitized.text,
+        text=body_text,
         body_format=chosen,
         attachments=attachment_list,
         flags=flags,

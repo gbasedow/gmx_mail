@@ -12,7 +12,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from imapclient.exceptions import IMAPClientError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.gmx_mail.const import CONF_PERMISSIONS, DOMAIN
+from custom_components.gmx_mail.const import CONF_ALLOW_HTML_OUTPUT, CONF_PERMISSIONS, DOMAIN
 from custom_components.gmx_mail.services import (
     SERVICE_GET_ATTACHMENT,
     SERVICE_GET_MESSAGE,
@@ -302,3 +302,20 @@ async def test_reads_retry_once_after_connection_loss(
     response = await call(hass, loaded_entry, SERVICE_SEARCH, limit=1)
     assert response["data"]["messages"]
     assert len(imap_server.clients) == 2
+
+
+async def test_get_message_html_requires_option(hass: HomeAssistant, loaded_entry: MockConfigEntry) -> None:
+    """format=html is refused unless a person enabled HTML output in the options; then cleaned HTML is framed."""
+    ref = {"folder": "INBOX", "uid": 4, "uidvalidity": 777}
+    with pytest.raises(ServiceValidationError) as err:
+        await call(hass, loaded_entry, SERVICE_GET_MESSAGE, ref=ref, format="html")
+    assert err.value.translation_key == "html_output_disabled"
+
+    hass.config_entries.async_update_entry(loaded_entry, options={**loaded_entry.options, CONF_ALLOW_HTML_OUTPUT: True})
+    await hass.async_block_till_done()  # options change reloads the entry
+    response = await call(hass, loaded_entry, SERVICE_GET_MESSAGE, ref=ref, format="html")
+    body = response["data"]["body"]
+    assert body["format"] == "html"
+    assert "<p>Hallo</p>" in body["text"] and "IGNORE" not in body["text"]
+    assert body["text"].startswith("<<<UNTRUSTED_EMAIL_CONTENT ")
+    assert response["warnings"] == ["hidden_content_removed"]

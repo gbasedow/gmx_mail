@@ -25,7 +25,11 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
   (`* BYE timeout`); `COPYUID` kommt bei MOVE ungetaggt (`* OK [COPYUID …]`; nur ein belastbarer Messpunkt, siehe GMX-NOTES Zeile 28).
 - Probe-Skript v3d (20.11.2026): `CLOSE` auf echten Ordnern durch `UNSELECT` ersetzt (sonst implizites EXPUNGE fremder `\Deleted`-Mails);
   Offline-Tests gegen Fake-IMAP-Server in `tests/`. Eingecheckt ist nur `docs/probe-2026-11-20-v4.json`.
-- SPEC.md ist um die M0-Ergebnisse ergänzt (Reconnect/NOOP, Suchfallback, COPYUID, APPENDLIMIT, Testcontainer).
+- SPEC.md ist um die M0-Ergebnisse ergänzt (Reconnect/NOOP, Suchfallback, COPYUID, APPENDLIMIT, Testcontainer). Vom Nutzer freigegeben.
+- **Nächster Schritt: M1** (freigegeben, noch nicht begonnen): Gerüst, manifest, Config-/Options-/Reauth-/Reconfigure-Flow,
+  ImapWorker (imapclient im Executor, `asyncio.Lock`, max. 2 Verbindungen, Reconnect/Backoff, NOOP, IDLE-Erneuerung eingeplant), Tests mit Mocks.
+  Umgebung: Linux mit Python 3.14 (`pytest-homeassistant-custom-component` passend zu HA 2026.11). Unter Windows/Python 3.15 nicht
+  installierbar (numpy ohne Wheel) – deshalb M1 in einer Linux-/Web-Session.
 - **Geklärt in Lauf 3:** SMTP legt **keine** Kopie in `Gesendet` an → Standard `sent_copy_mode=append`; `MOVE` nach `Gelöscht` funktioniert.
 - **Noch offen:** IMAP-Abschaltfrist (Langzeitbeobachtung). Weitere Live-Läufe sind für M1 nicht nötig.
 - M1 (Gerüst, Config-Flow, Verbindung, Reconnect) kann starten. `search` (M2) mit Indexverzögerungs-Fallback entwerfen.

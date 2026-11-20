@@ -29,9 +29,10 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
   `GmxOutcomeUnknownError` für Schreiben, Backoff 5 s–15 min mit Jitter, Auth-Fehler stoppt Reconnects und startet Reauth,
   `ConnectionLimiter` max. 2), `client/folders.py` (SPECIAL-USE → Heuristik → Override, Mehrdeutigkeit), `client/smtp.py` (nur Login-Check),
   Repair-Issue `imap_possibly_disabled`. Noch **keine** Aktionen, Entitäten, IDLE-Watcher, Diagnose (M2/M3).
-- Prüfungen: 105 Integrationstests + 29 Probe-Tests grün, Coverage 99 %, ruff, mypy (strict) grün. hassfest/HACS laufen nur als GitHub Action
+- Prüfungen: 107 Integrationstests + 29 Probe-Tests grün, Coverage 99 %, ruff, mypy (strict) grün. hassfest/HACS laufen nur als GitHub Action
   (lokal nicht ausgeführt). `pytest-homeassistant-custom-component` 0.13.375 bringt HA **2026.10.4** mit – für 2026.11 gibt es noch keine Version.
-- Offene Entscheidungen aus M1: siehe `docs/DECISIONS.md` Nr. 11–16 (Freigabe durch den Nutzer ausstehend).
+- Entscheidungen aus M1: `docs/DECISIONS.md` Nr. 11–16. Nr. 12 entschieden (Limits frei wählbar, SPEC-Werte als Voreinstellung);
+  Nr. 11, 13–16 Freigabe offen. Offen für M6: Stundenlimit für Empfänger (Drittquelle: 11 Empfänger/Stunde, unbestätigt).
 - **Nächster Schritt nach Freigabe: M2** (Leseaktionen). Vorher die Repos aus Abschnitt 10 sichten. `search` mit Indexverzögerungs-Fallback.
 - **Noch offen:** IMAP-Abschaltfrist (Langzeitbeobachtung).
 - Alle Annahmen, die in `GMX-NOTES.md` als `U` (unbestätigt) oder `LIVE` markiert sind, nicht als Fakt behandeln.

@@ -106,10 +106,11 @@ FOLDER_OVERRIDE_KEYS: Final[dict[FolderRole, str]] = {
     FolderRole.JUNK: CONF_FOLDER_JUNK,
 }
 
-# Limits: the defaults are also the hard upper bounds (options can only make them stricter).
-MAX_RECIPIENTS_LIMIT: Final = 10
-MAX_SEND_PER_DAY_LIMIT: Final = 20
-MAX_DELETE_PER_DAY_LIMIT: Final = 200
+# Limits (SPEC section 5, measure 5): defaults only, freely adjustable in the options flow (minimum 1).
+# GMX does not publish its own sending limits (GMX-NOTES row 20); high values risk an account block.
+DEFAULT_MAX_RECIPIENTS: Final = 10
+DEFAULT_MAX_SEND_PER_DAY: Final = 20
+DEFAULT_MAX_DELETE_PER_DAY: Final = 200
 
 POLL_INTERVAL_MIN_S: Final = 60
 POLL_INTERVAL_MAX_S: Final = 3600
@@ -130,9 +131,9 @@ DEFAULT_OPTIONS: Final[dict[str, object]] = {
     CONF_ALLOWLIST: [],
     CONF_ALLOW_REPLY_TO_SENDER: False,
     CONF_ALLOW_PERMANENT_DELETE: False,
-    CONF_MAX_RECIPIENTS: MAX_RECIPIENTS_LIMIT,
-    CONF_MAX_SEND_PER_DAY: MAX_SEND_PER_DAY_LIMIT,
-    CONF_MAX_DELETE_PER_DAY: MAX_DELETE_PER_DAY_LIMIT,
+    CONF_MAX_RECIPIENTS: DEFAULT_MAX_RECIPIENTS,
+    CONF_MAX_SEND_PER_DAY: DEFAULT_MAX_SEND_PER_DAY,
+    CONF_MAX_DELETE_PER_DAY: DEFAULT_MAX_DELETE_PER_DAY,
     CONF_POLL_INTERVAL: DEFAULT_POLL_INTERVAL_S,
     CONF_IDLE_ENABLED: True,
     CONF_IDLE_RENEW_MINUTES: DEFAULT_IDLE_RENEW_MINUTES,

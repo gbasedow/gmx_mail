@@ -95,7 +95,7 @@
           },
           "limits_section": {
             "name": "Grenzen",
-            "description": "Die Grenzen können nur unter das eingebaute Maximum gesenkt werden.",
+            "description": "Frei wählbar (mindestens 1). GMX veröffentlicht seine Versandlimits nicht; hohe Werte können zu einer vorübergehenden Kontosperre führen.",
             "data": {
               "max_recipients": "Höchstzahl Empfänger je Nachricht",
               "max_send_per_day": "Höchstzahl gesendeter Nachrichten pro Tag",

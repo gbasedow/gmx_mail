@@ -151,7 +151,8 @@ als „search + move/flag“ auf neue Mails anwendet. Repair-Issue `server_rules
    - Option `allow_reply_to_sender` (Voreinstellung aus): erlaubt Antworten an den Absender der Original-Mail ohne Allowlist-Eintrag.
 3. **Löschen** standardmäßig nur in den Papierkorb. Endgültig nur mit Option `allow_permanent_delete` und Token. Nie mailbox-weites EXPUNGE, nur UID EXPUNGE mit UIDPLUS*.
 4. **Zwei-Schritt mit Token und Dry-Run** für Senden und endgültiges Löschen (Abschnitt 3).
-5. **Mengenlimits** je Aufruf (Refs <= 100, Löschen <= 50, Empfänger <= 10) und je Tag (Senden 20, Löschen 200), gespeichert per `Store`.
+5. **Mengenlimits** je Aufruf (Refs <= 100, Löschen <= 50) sowie Empfänger je Mail (Voreinstellung 10) und je Tag (Senden 20, Löschen 200), gespeichert per `Store`.
+   Empfänger-, Versand- und Löschlimit sind im Options-Flow frei wählbar (mindestens 1, ohne Obergrenze); die genannten Werte sind Voreinstellungen (DECISIONS Nr. 12).
 6. **Keine automatische Wiederholung** mehrdeutiger Schreibvorgänge nach Timeout*; Rückmeldung `outcome: unknown`.
 7. **Inhalts-Sanitizing:**
    - HTML zu Text; entfernen: script, style, Kommentare und Elemente mit `display:none`, `visibility:hidden`, `font-size:0` oder weißer Schrift auf weißem Grund.

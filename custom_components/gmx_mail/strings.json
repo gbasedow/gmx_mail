@@ -95,7 +95,7 @@
           },
           "limits_section": {
             "name": "Limits",
-            "description": "Limits can only be lowered below the built-in maximum.",
+            "description": "Freely adjustable (at least 1). GMX does not publish its sending limits; high values can lead to a temporary account block.",
             "data": {
               "max_recipients": "Maximum recipients per message",
               "max_send_per_day": "Maximum messages sent per day",

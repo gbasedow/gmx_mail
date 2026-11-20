@@ -244,7 +244,9 @@ class GmxMailConfigFlow(ConfigFlow, domain=DOMAIN):
 
 def _int_selector(key: str, unit: str | None = None) -> Any:
     low, high = INT_RANGES[key]
-    config = NumberSelectorConfig(min=low, max=high, step=1, mode=NumberSelectorMode.BOX)
+    config = NumberSelectorConfig(min=low, step=1, mode=NumberSelectorMode.BOX)
+    if high is not None:
+        config["max"] = high
     if unit is not None:
         config["unit_of_measurement"] = unit
     return probatio.All(NumberSelector(config), probatio.Coerce(int))

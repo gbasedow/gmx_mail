@@ -10,6 +10,7 @@ from custom_components.gmx_mail.const import (
     CONF_ALLOWLIST,
     CONF_FOLDER_SENT,
     CONF_IDLE_RENEW_MINUTES,
+    CONF_MAX_DELETE_PER_DAY,
     CONF_MAX_RECIPIENTS,
     CONF_MAX_SEND_PER_DAY,
     CONF_PERMISSIONS,
@@ -93,7 +94,8 @@ def test_allowlist_normalisation() -> None:
         ({CONF_SEND_MODE: "any", CONF_ALLOWLIST: []}, "any_requires_wildcard"),
         ({CONF_SEND_MODE: "any", CONF_ALLOWLIST: ["a@b.de"]}, "any_requires_wildcard"),
         ({CONF_SENT_COPY_MODE: "twice"}, "invalid_sent_copy_mode"),
-        ({CONF_MAX_RECIPIENTS: 11}, "out_of_range"),
+        ({CONF_MAX_RECIPIENTS: 0}, "out_of_range"),
+        ({CONF_MAX_DELETE_PER_DAY: -5}, "out_of_range"),
         ({CONF_MAX_SEND_PER_DAY: 0}, "out_of_range"),
         ({CONF_IDLE_RENEW_MINUTES: 26}, "out_of_range"),
         ({CONF_POLL_INTERVAL: "fast"}, "out_of_range"),
@@ -121,6 +123,15 @@ def test_numbers_are_coerced_and_folder_overrides_trimmed() -> None:
     assert options[CONF_POLL_INTERVAL] == 120
     assert isinstance(options[CONF_POLL_INTERVAL], int)
     assert folder_overrides(options) == {FolderRole.SENT: "Gesendet"}
+
+
+def test_limits_default_to_spec_values_and_can_be_raised() -> None:
+    """SPEC values are defaults only; larger values are accepted (decision 12)."""
+    options, _errors = validate_options({})
+    assert (options[CONF_MAX_RECIPIENTS], options[CONF_MAX_SEND_PER_DAY], options[CONF_MAX_DELETE_PER_DAY]) == (10, 20, 200)
+    options, errors = validate_options({CONF_MAX_RECIPIENTS: 50.0, CONF_MAX_SEND_PER_DAY: 500, CONF_MAX_DELETE_PER_DAY: 10_000})
+    assert errors == {}
+    assert (options[CONF_MAX_RECIPIENTS], options[CONF_MAX_SEND_PER_DAY], options[CONF_MAX_DELETE_PER_DAY]) == (50, 500, 10_000)
 
 
 def test_with_defaults_drops_unknown_keys() -> None:

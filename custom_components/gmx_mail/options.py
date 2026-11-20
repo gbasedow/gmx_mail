@@ -32,9 +32,6 @@ from .const import (
     FOLDER_OVERRIDE_KEYS,
     IDLE_RENEW_MAX_MINUTES,
     IDLE_RENEW_MIN_MINUTES,
-    MAX_DELETE_PER_DAY_LIMIT,
-    MAX_RECIPIENTS_LIMIT,
-    MAX_SEND_PER_DAY_LIMIT,
     POLL_INTERVAL_MAX_S,
     POLL_INTERVAL_MIN_S,
     SECTION_CONNECTION,
@@ -58,10 +55,11 @@ OPTION_SECTIONS: Final[dict[str, tuple[str, ...]]] = {
     SECTION_PRIVACY: (CONF_EVENT_INCLUDE_HEADERS, CONF_AUDIT_RETENTION_DAYS),
 }
 
-INT_RANGES: Final[dict[str, tuple[int, int]]] = {
-    CONF_MAX_RECIPIENTS: (1, MAX_RECIPIENTS_LIMIT),
-    CONF_MAX_SEND_PER_DAY: (1, MAX_SEND_PER_DAY_LIMIT),
-    CONF_MAX_DELETE_PER_DAY: (1, MAX_DELETE_PER_DAY_LIMIT),
+# (minimum, maximum); maximum None = no upper bound.
+INT_RANGES: Final[dict[str, tuple[int, int | None]]] = {
+    CONF_MAX_RECIPIENTS: (1, None),
+    CONF_MAX_SEND_PER_DAY: (1, None),
+    CONF_MAX_DELETE_PER_DAY: (1, None),
     CONF_POLL_INTERVAL: (POLL_INTERVAL_MIN_S, POLL_INTERVAL_MAX_S),
     CONF_IDLE_RENEW_MINUTES: (IDLE_RENEW_MIN_MINUTES, IDLE_RENEW_MAX_MINUTES),
     CONF_AUDIT_RETENTION_DAYS: (AUDIT_RETENTION_MIN_DAYS, AUDIT_RETENTION_MAX_DAYS),
@@ -148,7 +146,7 @@ def validate_options(raw: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, 
         except TypeError, ValueError:
             errors.setdefault("base", "out_of_range")
             continue
-        if not low <= value <= high:
+        if value < low or (high is not None and value > high):
             errors.setdefault("base", "out_of_range")
         options[key] = value
 

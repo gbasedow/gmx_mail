@@ -19,6 +19,7 @@ from custom_components.gmx_mail.const import (
     CONF_IMAP_HOST,
     CONF_IMAP_PORT,
     CONF_IMAP_SECURITY,
+    CONF_MAX_RECIPIENTS,
     CONF_PASSWORD,
     CONF_PERMISSIONS,
     CONF_SEND_MODE,
@@ -28,6 +29,7 @@ from custom_components.gmx_mail.const import (
     DEFAULT_OPTIONS,
     DOMAIN,
     SECTION_FOLDERS,
+    SECTION_LIMITS,
     SECTION_PERMISSIONS,
     SECTION_SENDING,
     SECTION_SERVER,
@@ -201,6 +203,11 @@ async def test_options_flow(
     folders_section = next(value for key, value in schema.items() if key == SECTION_FOLDERS)
     folder_field = next(value for key, value in folders_section.schema.schema.items() if key == CONF_FOLDER_SENT)
     assert "Gesendet" in folder_field.config["options"]
+    limits_section = next(value for key, value in schema.items() if key == SECTION_LIMITS)
+    recipients_field = next(value for key, value in limits_section.schema.schema.items() if key == CONF_MAX_RECIPIENTS)
+    selector_config = recipients_field.validators[0].config
+    assert selector_config["min"] == 1
+    assert "max" not in selector_config  # freely adjustable (decision 12)
 
     form = nest(DEFAULT_OPTIONS)
     form[SECTION_SENDING] = {**form[SECTION_SENDING], CONF_SEND_MODE: "any", CONF_ALLOWLIST: ["a@b.de"]}

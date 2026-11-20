@@ -76,6 +76,24 @@ class ImapSession(Protocol):
     def shutdown(self) -> None:
         """Close the connection without logging out."""
 
+    def select_folder(self, folder: str, readonly: bool = False) -> dict[bytes, Any]:
+        """SELECT (or EXAMINE with ``readonly=True``) a folder."""
+
+    def unselect_folder(self) -> Any:
+        """UNSELECT the current folder (never expunges)."""
+
+    def folder_status(self, folder: str, what: Sequence[str] | None = None) -> dict[bytes, Any]:
+        """STATUS of a folder."""
+
+    def search(self, criteria: Any = "ALL", charset: str | None = None) -> list[int]:
+        """UID SEARCH."""
+
+    def sort(self, sort_criteria: Any, criteria: Any = "ALL", charset: str = "UTF-8") -> list[int]:
+        """UID SORT (RFC 5256)."""
+
+    def fetch(self, messages: Sequence[int], data: Sequence[str], modifiers: Any = None) -> dict[int, dict[bytes, Any]]:
+        """UID FETCH."""
+
 
 class Executor(Protocol):
     """Runs a blocking callable outside the event loop (``hass.async_add_executor_job``)."""
@@ -187,6 +205,8 @@ def open_imap_connection(settings: ImapSettings, context: ssl.SSLContext) -> Ima
         raise GmxConnectionError(f"connection failed: {type(err).__name__}") from err
 
     assert client is not None
+    # Keep server time zones (aware datetimes) instead of converting to naive local time.
+    client.normalise_times = False
     session: ImapSession = client
     try:
         client.login(settings.username, settings.password)

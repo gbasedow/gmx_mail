@@ -48,3 +48,27 @@ class GmxOutcomeUnknownError(GmxMailError):
 
     Writing commands are never repeated automatically (SPEC section 5, measure 6).
     """
+
+
+class GmxFolderNotFoundError(GmxMailError):
+    """The folder does not exist (or cannot be selected)."""
+
+
+class GmxUidValidityError(GmxMailError):
+    """UIDVALIDITY of the folder changed; mail references are no longer valid."""
+
+
+class GmxMessageNotFoundError(GmxMailError):
+    """No message with this UID in the folder."""
+
+
+class GmxPartNotFoundError(GmxMailError):
+    """The message has no part with this id."""
+
+
+class GmxAttachmentTooLargeError(GmxMailError):
+    """The attachment exceeds the allowed size."""
+
+
+class GmxSearchRejectedError(GmxMailError):
+    """The server rejected the search criteria (e.g. the UTF-8 charset)."""

@@ -119,6 +119,34 @@ Das Token erzwingt einen Zwischenschritt, in dem Claude den Menschen fragen soll
 **Filterregeln:** in v1 nicht enthalten (keine GMX-Schnittstelle). Optional v2: deklarative Regeln im Options-Flow, die die Integration selbst
 als „search + move/flag“ auf neue Mails anwendet. Repair-Issue `server_rules_unavailable` (info) dokumentiert die Grenze.
 
+### Umsetzung der Leseaktionen (M2, Stand 20.11.2026)
+
+Abweichungen und Präzisierungen gegenüber der Tabelle oben (Begründung: `docs/DECISIONS.md` Nr. 18–23):
+- **Zusätzlich in M2:** `get_status` (nur vorhandene Daten plus STATUS des Posteingangs). `idle_active`/`last_sync` liefern bis M3
+  `false`/`null`; `limits_used` und `get_audit_log` folgen mit dem Audit-Log in M4.
+- **Ordner** werden nur mit EXAMINE geöffnet und mit UNSELECT verlassen (ohne UNSELECT-Capability: Ordner bleibt read-only selektiert,
+  kein `CLOSE`). Inhalte nur per `BODY.PEEK`, Kopfzeilen über `BODY.PEEK[HEADER.FIELDS (…)]` mit `email` (`policy.default`),
+  weil imapclients ENVELOPE RFC-2047-Betreffs nicht dekodiert.
+- **`search`:** Gelöschte (`\Deleted`) Mails werden immer ausgeschlossen (`UNDELETED`). `CHARSET UTF-8` nur bei Nicht-ASCII-Werten.
+  Lehnt der Server ab: Fehler `search_rejected` (kein stiller ASCII-Fallback, weil Umlaute dabei verloren gingen).
+  Sortierung per SORT nach dem `Date`-Header; ohne SORT clientseitig nach INTERNALDATE über die neuesten 2000 UIDs (Warnung `sort_partial`).
+  Indexverzögerung: Bei jedem Textkriterium werden zusätzlich die bis zu 50 neuesten Mails der letzten 2 Minuten anhand ihrer Kopfzeilen
+  geprüft (`search_mode: "server+recent_headers"`); bei `text`/`body` stattdessen Warnung `index_lag`.
+  Vorschau nur mit `include_snippet=true` (bis 160 Zeichen). Cursor = Ordner + UIDVALIDITY + Offset + Hash der Kriterien;
+  ein Cursor mit anderen Kriterien oder nach UIDVALIDITY-Wechsel wird abgelehnt (`invalid_cursor`, `uidvalidity_changed`).
+- **`get_message`:** Text bevorzugt `text/plain` (`format=text`) bzw. `text/html` (`html_as_text`); Textteile > 2 MB werden nur
+  anteilig geladen (`body_truncated_at_source`). Der Text steht zwischen `<<<UNTRUSTED_EMAIL_CONTENT <nonce>` und
+  `>>>END_UNTRUSTED_EMAIL_CONTENT <nonce>`; die Zufallskennung gilt je Antwort, Markierungen im Mailtext werden entschärft.
+  Warnungen `hidden_content_removed`, `invisible_characters_removed`, `no_text_body`. `List-Unsubscribe` nur als Domainliste.
+- **`get_attachment`:** Größe wird vor dem Download aus BODYSTRUCTURE geprüft. Ablage unter `<Medienordner>/gmx_mail/<entry_id>/
+  <uid>_<part>_<bereinigter Name>` (Medienordner aus `hass.config.media_dirs["local"]`, auf HAOS `/media`); der Pfad muss in
+  `allowlist_external_dirs` liegen. Kein automatisches Aufräumen (offen, M7). base64-Antworten (bis 256 KB) überschreiten das 24-KB-Budget
+  bewusst – es gilt für Mailtext, nicht für ausdrücklich angeforderte Dateien.
+- **`list_folders`:** Schlägt STATUS für einen einzelnen Ordner fehl, fehlt nur dort die Anzahl (`counts_unavailable: true`).
+  LIST-STATUS wird nicht genutzt (imapclient unterstützt es nicht); ein STATUS je Ordner.
+- **Teil-FETCH:** GreenMail antwortet auf `BODY.PEEK[x]<0.n>` formal fehlerhaft (fehlendes Leerzeichen vor dem Literal), imapclient bricht ab.
+  Rückfall: ganzer Teil (Vorschau nur bis 64 KB). Ob GMX korrekt antwortet, ist ungeprüft (LIVE).
+
 ## 4. Sensoren, Ereignisse, Repairs, Diagnose
 
 - **Sensoren:** `sensor.<konto>_ungelesen_posteingang`, `sensor.<konto>_spam_anzahl`, `sensor.<konto>_letzte_synchronisation` (Timestamp),
@@ -174,7 +202,8 @@ Die Allowlist ist die einzige harte technische Grenze gegen Datenabfluss; Token 
 1. **Unit-Tests** mit `pytest-homeassistant-custom-component` (passend zu 2026.11.x): Config-, Options-, Reauth-, Reconfigure-Flow;
    jede Aktion mit Erfolgs-, Validierungs- und Rechtefehler; PolicyEngine, Token, RateLimiter, Sanitizer (Injection-Korpus, versteckter Text, Zero-Width),
    MIME-Parser mit kaputten Strukturen und gemischten Charsets.
-2. **Integrationstests** gegen GreenMail (IMAP/SMTP mit UIDPLUS und MOVE) und Dovecot im Container (`docker-compose`, Pytest-Marker `integration`).
+2. **Integrationstests** gegen GreenMail (IMAP/SMTP mit UIDPLUS und MOVE; ab M2 umgesetzt in `tests/integration`, in der CI als
+   Service-Container) und Dovecot im Container (noch nicht umgesetzt) (`docker-compose`, Pytest-Marker `integration`).
    Dovecot GMX-ähnlich konfigurieren: Capabilities wie in M0 gemessen (`docs/probe-2026-11-20-v4.json`, inkl. `APPENDLIMIT=29360128`,
    MOVE, UIDPLUS, SPECIAL-USE, LIST-STATUS, SORT), ohne CONDSTORE/QRESYNC, QUOTA, ESEARCH, UTF8=ACCEPT; Ordner `Gesendet`, `Entwürfe`,
    `Gelöscht`, `Spamverdacht` mit SPECIAL-USE; kurzes Idle-Timeout (z. B. 60 s), um Reconnect und IDLE-Erneuerung zu testen.

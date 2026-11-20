@@ -12,8 +12,9 @@
 | 8 | 2026-11-20 | Übergabe an Claude Code über Dateien (`CLAUDE.md`, `SPEC.md`, `GMX-NOTES.md`) statt eines langen Prompts. | Claude Code liest `CLAUDE.md` automatisch; Dateien sind versionierbar. |
 | 9 | 2026-11-20 | Menschliche Freigabe über ha-mcp „Tool Security Policies (user approval)“; ha-mcp-Read-Only-Modus nicht verwenden. | Read-Only-Modus deaktiviert `ha_call_service` komplett. |
 
+- `sent_copy_mode` Standard `append`: GMX legt per SMTP keine Gesendet-Kopie an (M0, Lauf 3).
+
 ## Offen
 
-- Gesendet-Kopie bei SMTP (`sent_copy_mode`) – nach M0.
 - Heartbeat gegen die automatische IMAP-Abschaltung – nach M0 bewerten.
 - Betrieb: Integration zuerst auf einer Staging-Instanz; Produktivfreigabe durch den Nutzer.

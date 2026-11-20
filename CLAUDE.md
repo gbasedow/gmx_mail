@@ -19,10 +19,13 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
 
 ## 2. Status
 
-- Stand der Recherche: 20.11.2026. **Noch keine Integration, keine Live-Tests gegen GMX.**
-  `tools/gmx_probe.py` ist nur gegen einen lokalen Fake-IMAP-Server geprüft (siehe `GMX-NOTES.md`, Abschnitt 3).
-- Nächster Schritt: **M0** – `tools/gmx_probe.py` gegen ein Test-Konto laufen lassen (macht der Nutzer),
-  Ergebnisse in `GMX-NOTES.md` eintragen, offene Fragen schließen. Erst danach GMX-abhängigen Code schreiben.
+- Stand: 20.11.2026. **Noch keine Integration.** M0 (Live-Probe v2 gegen GMX) ist gelaufen; Ergebnisse stehen in `GMX-NOTES.md`
+  (Spalte „Ergebnis“, Abschnitt 4) und `docs/probe-2026-11-20.json`. Kernfunktionen bestätigt (UIDPLUS, MOVE, Keywords, UTF-7-Ordner, 4 parallele Verbindungen).
+- **Geklärt in Lauf 2:** Textsuche = Indexverzögerung ≈ 30 s bei neuen Mails (Bestand schnell); IDLE/ruhende Verbindung wird nach ≈ 30 min getrennt
+  (`* BYE timeout`); `COPYUID` kommt bei MOVE ungetaggt (`* OK [COPYUID …]`).
+- **Geklärt in Lauf 3:** SMTP legt **keine** Kopie in `Gesendet` an → Standard `sent_copy_mode=append`; `MOVE` nach `Gelöscht` funktioniert.
+- **Noch offen:** IMAP-Abschaltfrist (Langzeitbeobachtung). Weitere Live-Läufe sind für M1 nicht nötig.
+- M1 (Gerüst, Config-Flow, Verbindung, Reconnect) kann starten. `search` (M2) mit Indexverzögerungs-Fallback entwerfen.
 - Alle Annahmen, die in `GMX-NOTES.md` als `U` (unbestätigt) oder `LIVE` markiert sind, nicht als Fakt behandeln.
   Capability-abhängig implementieren (z. B. MOVE sonst COPY + `\Deleted` + UID EXPUNGE).
 
@@ -80,8 +83,8 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
   (`Entwürfe` = `Entw&APw-rfe`).
 - CAPABILITY (Drittquellen, vor Login): IDLE, MOVE, UIDPLUS, SPECIAL-USE, SORT, ENABLE, NAMESPACE, LITERAL-, LIST-EXTENDED,
   LIST-STATUS, UNSELECT. Fehlend: CONDSTORE, QUOTA, ESEARCH, UTF8=ACCEPT. Liste nach Login live prüfen.
-- Unklar (LIVE klären): Gesendet-Kopie bei SMTP, SEARCH mit Umlauten/`CHARSET UTF-8`/Volltext, eigene Keywords,
-  Verbindungslimit, Verhalten von `\Deleted`/Papierkorb, Frist der IMAP-Abschaltung.
+- Live geklärt (M0): keine Gesendet-Kopie per SMTP, Suchindex ≈ 30 s verzögert, IDLE-Timeout ≈ 30 min, Keywords und 4 Verbindungen ok.
+  Offen: Frist der IMAP-Abschaltung.
 - Versandlimits unveröffentlicht (Drittquelle: „max. 11 Empfänger pro Stunde“ im Client – unbestätigt) -> konservative Defaults,
   keine Massentests.
 
@@ -111,7 +114,7 @@ GMX_USER=... GMX_PASS=... python3 tools/gmx_probe.py   # nur manuell, Test-Konto
 
 ## 9. Meilensteine (Kurzfassung, Details in `SPEC.md`)
 
-M0 Live-Probe · M1 Gerüst + Flows · M2 Lesen · M3 Coordinator/IDLE/Sensoren/Diagnose/Repairs · M4 Organisieren ·
+M0 Live-Probe (v2 erledigt, Folgelauf v3 offen) · M1 Gerüst + Flows · M2 Lesen · M3 Coordinator/IDLE/Sensoren/Diagnose/Repairs · M4 Organisieren ·
 M5 Löschen · M6 Senden · M7 Härtung, Doku, Release.
 
 ## 10. Vor M2 noch zu sichten (in der Recherche nicht geprüft)

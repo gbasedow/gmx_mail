@@ -83,13 +83,13 @@ Lesen: `SupportsResponse.ONLY`; Schreiben: `SupportsResponse.OPTIONAL`.
 | Aktion | Parameter (Default) | Rückgabe `data` | Stufe | Limits / Fehler |
 |---|---|---|---|---|
 | `list_folders` | `include_counts`(false) | `folders[{name, path, role, delimiter, flags, messages?, unseen?}]` | R | LIST-STATUS, falls verfügbar |
-| `search` | `folder`(INBOX), `from, to, cc, subject, text, body, since, before, seen, flagged, answered, draft, larger, smaller, keyword, uid_range`, `sort`(date_desc), `limit`(20, max 50), `cursor` | `messages[{ref, date, from, to[<=5], subject<=200, size, flags, has_attachments, snippet<=160?}]`, `page` | R | Umlaut-Suche über `CHARSET UTF-8`; bei Ablehnung Warnung + ASCII-Fallback. Sortierung per SORT, sonst clientseitig über max. 2000 UIDs. Fehler: `folder_not_found`, `search_rejected` |
+| `search` | `folder`(INBOX), `from, to, cc, subject, text, body, since, before, seen, flagged, answered, draft, larger, smaller, keyword, uid_range`, `sort`(date_desc), `limit`(20, max 50), `cursor` | `messages[{ref, date, from, to[<=5], subject<=200, size, flags, has_attachments, snippet<=160?}]`, `page` | R | Umlaut-Suche über `CHARSET UTF-8`; bei Ablehnung Warnung + ASCII-Fallback. **M0: GMX indexiert neue Mails mit ≈ 30 s Verzögerung** (Bestandssuche schnell: 0,5–1,5 s bei ~3400 Mails). Antwort enthält `search_mode`; für Mails der letzten ~2 min zusätzlich clientseitiger Header-Abgleich per FETCH, Hinweis `index_lag` in der Antwort. Sortierung per SORT, sonst clientseitig über max. 2000 UIDs. Fehler: `folder_not_found`, `search_rejected` |
 | `get_message` | `ref`, `format`(text\|html_as_text\|raw_headers), `max_chars`(8000, max 32000), `offset`(0), `headers`(Standardliste) | `headers{…}, body{text, chars_total, truncated, next_offset}, attachments[{part_id, filename, mime, size, inline}], auth_results?, list_unsubscribe?` | R | setzt **nicht** `\Seen` (BODY.PEEK) |
 | `get_attachment` | `ref`, `part_id`, `mode`(save\|base64), `max_bytes`(10 MB) | `{path, filename, size, sha256}` bzw. `{base64}` wenn <= 256 KB | R | speichert nur unter `/media/gmx_mail/<entry>/`, Dateiname bereinigt |
 | `get_status` | – | `{capabilities, folders_map, unseen_inbox, last_sync, idle_active, limits_used}` | R | – |
 | `get_audit_log` | `limit`(50) | `entries[…]` ohne Inhalte | R | – |
 | `set_flags` | `refs[]`, `add[]`, `remove[]` (seen, flagged, answered, `$keyword`) | `{updated:n}` | O | max. 100 Refs; Keywords nur wenn PERMANENTFLAGS `\*` enthält |
-| `move` / `copy` | `refs[]`, `target_folder` | `{moved:n, new_refs[]}` (über COPYUID) | O | max. 100; Ziel muss existieren |
+| `move` / `copy` | `refs[]`, `target_folder` | `{moved:n, new_refs[]}` (COPYUID nur wenn geliefert; bei MOVE kam er in M0 nicht im getaggten OK, sonst Ziel-UID per Message-ID suchen) | O | max. 100; Ziel muss existieren |
 | `mark_spam` / `mark_not_spam` | `refs[]` | `{moved:n}` | O | verschiebt nach/aus Junk; Wirkung auf GMX-Lernfilter unbestätigt |
 | `create_folder` / `rename_folder` | `name`/`path`, `parent` | `{path}` | O | Spezialordner nicht umbenennbar |
 | `save_draft` | `to, cc, bcc, subject, body_text, body_html?, in_reply_to_ref?` | `{ref}` | O | APPEND mit `\Draft` |
@@ -188,12 +188,14 @@ Nach jeder Etappe: Tests grün, Kurzbericht, Freigabe abwarten.
 
 - **Frist der IMAP-Abschaltung** unbekannt; ob Dauer-IDLE als Nutzung zählt, ist zweifelhaft (Forum: „alle 4 Wochen“ trotz täglicher Nutzung).
   Mitigation: Reauth + Repair, ggf. regelmäßiger kurzer Login-Heartbeat (nach M0 bewerten, Sicherheit/Nutzen abwägen).
-- **Gesendet-Kopie bei SMTP** offen (fehlende oder doppelte Kopien berichtet) -> `sent_copy_mode`.
+- **APPENDLIMIT** 29360128 B (≈ 28 MiB) begrenzt Entwürfe/APPEND; `save_draft` und Anhänge darauf prüfen.
+- **Gesendet-Kopie:** GMX legt per SMTP keine an (M0, Lauf 3) → `sent_copy_mode` Standard `append` (APPEND mit `\Seen` in den `\Sent`-Ordner, Message-ID der gesendeten Mail verwenden); `auto` prüft vorher per Header-Abgleich, `none` schaltet ab. Duplikate möglich, falls GMX das Verhalten ändert.
 - **Versandlimits** dynamisch und unveröffentlicht; Massentests können eine Kontosperre auslösen.
-- **SEARCH-Qualität** mit Umlauten und im Volltext sowie Performance in großen Postfächern ungeklärt. Lokale Indexierung erst in v2
+- **SEARCH:** Indexverzögerung ≈ 30 s bei neuen Mails (M0, Lauf 2); Umlaut-Suche im Bestand noch nicht mit echten Mails geprüft.
+- **Verbindungs-Timeout:** GMX trennt IDLE und ruhende Verbindungen nach ≈ 30 min (`* BYE timeout`) → IDLE alle ≤ 25 min erneuern, Reconnect-Logik. Lokale Indexierung erst in v2
   (Speicher, Datenschutz).
 - **Ordnernamen** widersprüchlich; mögliche Doppelordner aus früheren Clients (`Sent`).
-- **Eigene Keywords** werden vom Server eventuell nicht gespeichert.
+- **Eigene Keywords:** in M0 bestätigt (`PERMANENTFLAGS … \*`, Keyword gesetzt und gefunden); Prüfung zur Laufzeit bleibt.
 - **ha-mcp:** keine dokumentierten Größen- und Zeitlimits für `service_response`; lange SMTP-/FETCH-Läufe können Client-Timeouts überschreiten.
 - **Parallelbetrieb** mit Core-`imap`/`smtp` auf demselben Konto belegt zusätzliche Verbindungen (Limit unbekannt, Forumsangabe: 5).
 - **Nicht geprüft:** `jgalea/mailbox-mcp`, `danieldotnl/ha-mailbox-mcp`, `dadalouis/Home-mail`; arm64-Images und Pflegezustand sonstiger Mail-MCP-Projekte.

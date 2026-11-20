@@ -11,6 +11,7 @@ durch Claude über den ha-mcp-Server. **Status: Planungsphase – noch kein Code
 | `docs/DECISIONS.md` | Getroffene Entscheidungen |
 | `docs/SOURCES.md` | Quellenverzeichnis der Recherche |
 | `docs/START-PROMPT.md` | Prompt zum Start der Arbeit in Claude Code |
+| `docs/probe-2026-11-20*.json` | Bereinigte Ergebnisse der M0-Live-Tests (Lauf 1–3) |
 | `tools/gmx_probe.py` | Live-Prüfskript gegen ein GMX-Testkonto (gibt keine Mailinhalte aus) |
 | `custom_components/gmx_mail/` | Platz für die Integration (noch leer) |
 | `tests/` | Tests; bisher nur Hilfsfunktionen des Probe-Skripts (`pytest -q tests`) |

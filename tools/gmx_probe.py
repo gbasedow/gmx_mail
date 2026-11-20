@@ -17,6 +17,16 @@ Sicherheitsregeln dieses Skripts:
   * Ordnernamen werden nur mit --print-folders ausgegeben (Spezialordner immer).
 
 Nur Standardbibliothek, Python >= 3.10.
+
+Zertifikatsfehler (SSLCertVerificationError / "unable to get local issuer certificate"):
+  * Das Skript prueft das Server-Zertifikat immer. Es probiert nacheinander den System-Vertrauensspeicher,
+    certifi (falls installiert) und unter macOS die System-Schluesselbunde. Die gewaehlte Quelle steht in
+    connect.trust_source. Die Pruefung wird nie abgeschaltet, weil das App-Passwort uebertragen wird.
+  * --tls-diagnose zeigt, welche Zertifikatskette der Server liefert und welche Vertrauensquelle funktioniert.
+    Dabei werden KEINE Zugangsdaten gesendet.
+  * --cafile PFAD  waehlt eine eigene CA-Datei (PEM oder einzelnes DER-.cer), z. B. die Root-CA des Ausstellers
+    oder eines Firmen-/Antiviren-Proxys. Alternativ die Umgebungsvariable SSL_CERT_FILE setzen.
+  * Windows: Python sieht nur Root-Zertifikate, die Windows schon lokal installiert hat. Abhilfe: py -m pip install certifi
 """
 from __future__ import annotations
 
@@ -27,9 +37,15 @@ import imaplib
 import json
 import os
 import re
+import select
+import atexit
+import hashlib
 import smtplib
+import socket
 import ssl
+import subprocess
 import sys
+import tempfile
 import time
 from email.message import EmailMessage
 from typing import Any, Callable
@@ -128,8 +144,239 @@ def decode_list(lines: list[Any]) -> list[dict[str, Any]]:
     return out
 
 
-def err(e: BaseException) -> dict[str, str]:
-    return {"error": f"{type(e).__name__}: {str(e)[:160]}"}
+def err(e: BaseException) -> dict[str, Any]:
+    out: dict[str, Any] = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
+    if isinstance(e, ssl.SSLCertVerificationError):
+        out["verify_code"] = e.verify_code
+        out["verify_message"] = e.verify_message
+        out["hint"] = TLS_HINT
+    return out
+
+
+TLS_HINT = (
+    "Zertifikatspruefung fehlgeschlagen: Dieser Rechner vertraut der Zertifikatskette nicht. Typische Ursachen: "
+    "(1) macOS mit python.org-Python ohne Zertifikate -> 'Install Certificates.command' im Python-Ordner ausfuehren "
+    "oder 'pip install certifi'; (2) Firmen- oder Antiviren-Proxy mit eigener CA (TLS-Inspektion) -> Root-CA als PEM "
+    "exportieren und mit --cafile angeben; (3) Linux ohne ca-certificates -> Paket installieren; (4) falsche Systemzeit; "
+    "(5) 'Hostname mismatch' -> falscher Host oder Proxy; (6) Windows: Python sieht nur Root-Zertifikate, die Windows schon lokal "
+    "installiert hat -> 'py -m pip install certifi' (das Skript nutzt certifi dann automatisch). Ursache eingrenzen mit: python3 tools/gmx_probe.py --tls-diagnose "
+    "(sendet keine Zugangsdaten). Die Pruefung nie abschalten, solange das App-Passwort uebertragen wird."
+)
+
+
+def pem_from_cafile(path: str) -> str:
+    """Return a PEM file path for `path`; converts a single DER certificate (.cer/.crt) to a temp PEM if needed."""
+    with open(path, "rb") as fh:
+        data = fh.read()
+    if b"BEGIN CERTIFICATE" in data:
+        return path
+    f = tempfile.NamedTemporaryFile("w", suffix=".pem", delete=False)
+    f.write(ssl.DER_cert_to_PEM_cert(data))
+    f.close()
+    atexit.register(lambda: os.path.exists(f.name) and os.unlink(f.name))
+    return f.name
+
+
+def make_context(cafile: str | None = None) -> ssl.SSLContext:
+    if cafile:
+        ctx = ssl.create_default_context(cafile=pem_from_cafile(cafile))
+    else:
+        ctx = ssl.create_default_context()
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    return ctx
+
+
+def certifi_path() -> str | None:
+    try:
+        import certifi  # type: ignore[import-not-found]
+
+        return str(certifi.where())
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def macos_keychain_pem() -> str | None:
+    """Export macOS root/system/login keychain certificates (OS trust, incl. admin-installed CAs) to a temp PEM."""
+    if sys.platform != "darwin":
+        return None
+    keychains = ["/System/Library/Keychains/SystemRootCertificates.keychain", "/Library/Keychains/System.keychain"]
+    login = os.path.expanduser("~/Library/Keychains/login.keychain-db")
+    if os.path.exists(login):
+        keychains.append(login)
+    try:
+        cp = subprocess.run(
+            ["security", "find-certificate", "-a", "-p", *keychains], capture_output=True, text=True, timeout=30, check=False
+        )
+    except Exception:  # noqa: BLE001
+        return None
+    if "BEGIN CERTIFICATE" not in cp.stdout:
+        return None
+    f = tempfile.NamedTemporaryFile("w", suffix=".pem", delete=False)
+    f.write(cp.stdout)
+    f.close()
+    atexit.register(lambda: os.path.exists(f.name) and os.unlink(f.name))
+    return f.name
+
+
+def trust_candidates(cafile: str | None):
+    """Yield (label, cafile) in order of preference; lazily, so the macOS export only happens when needed."""
+    if cafile:
+        yield "cafile", cafile
+        return
+    yield "system", None
+    cp = certifi_path()
+    if cp:
+        yield "certifi", cp
+    mp = macos_keychain_pem()
+    if mp:
+        yield "macos_keychain", mp
+
+
+class TLSTrustError(Exception):
+    def __init__(self, tried: list[dict[str, Any]]) -> None:
+        super().__init__("certificate verification failed for all trust sources")
+        self.tried = tried
+
+
+def cert_info(der: bytes) -> dict[str, Any]:
+    info: dict[str, Any] = {"sha256": hashlib.sha256(der).hexdigest()}
+    try:
+        pem = ssl.DER_cert_to_PEM_cert(der)
+        with tempfile.NamedTemporaryFile("w", suffix=".pem", delete=False) as f:
+            f.write(pem)
+            path = f.name
+        try:
+            d = ssl._ssl._test_decode_cert(path)  # type: ignore[attr-defined]  # noqa: SLF001 (CPython-internal, optional)
+        finally:
+            os.unlink(path)
+
+        def flat(t: Any) -> dict[str, str]:
+            return {k: v for rdn in t for k, v in rdn}
+
+        subj, iss = flat(d.get("subject", ())), flat(d.get("issuer", ()))
+        info.update(
+            {
+                "subject_cn": subj.get("commonName"),
+                "issuer_cn": iss.get("commonName"),
+                "issuer_o": iss.get("organizationName"),
+                "not_before": d.get("notBefore"),
+                "not_after": d.get("notAfter"),
+                "self_signed": subj == iss,
+            }
+        )
+    except Exception as e:  # noqa: BLE001
+        info["decode_error"] = type(e).__name__
+    return info
+
+
+def tls_endpoint(host: str, port: int, smtp_starttls: bool, cafile_arg: str | None, no_tls: bool = False) -> dict[str, Any]:
+    """Look at the certificate chain of an endpoint WITHOUT sending credentials."""
+    out: dict[str, Any] = {"host": host, "port": port}
+    insecure = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    insecure.check_hostname = False
+    insecure.verify_mode = ssl.CERT_NONE
+    insecure.minimum_version = ssl.TLSVersion.TLSv1_2
+
+    def open_sock(ctx: ssl.SSLContext) -> tuple[Any, Any]:
+        if smtp_starttls:
+            S = smtplib.SMTP(host, port, timeout=10)
+            S.ehlo()
+            S.starttls(context=ctx)
+            return S.sock, S
+        raw = socket.create_connection((host, port), timeout=10)
+        return ctx.wrap_socket(raw, server_hostname=host), raw
+
+    try:
+        sock, holder = open_sock(insecure)
+        try:
+            out["tls_version"] = sock.version()
+            der = sock.getpeercert(binary_form=True)
+            chain: list[bytes] = []
+            getter = getattr(sock, "get_unverified_chain", None)
+            if getter:
+                try:
+                    for c in getter() or []:
+                        chain.append(c if isinstance(c, bytes) else c.public_bytes(ssl._ssl.ENCODING_DER))  # noqa: SLF001
+                except Exception:  # noqa: BLE001
+                    chain = []
+            if not chain and der:
+                chain = [der]
+            out["chain_length_sent_by_server"] = len(chain)
+            out["chain"] = [cert_info(c) for c in chain]
+        finally:
+            try:
+                sock.close()
+            except Exception:  # noqa: BLE001
+                pass
+    except Exception as e:  # noqa: BLE001
+        out["connect_error"] = err(e)
+        return out
+
+    attempts = []
+    for label, cafile in trust_candidates(cafile_arg):
+        ctx = make_context(cafile)
+        try:
+            sock, holder = open_sock(ctx)
+            sock.close()
+            attempts.append({"trust": label, "ok": True})
+            break
+        except ssl.SSLCertVerificationError as e:
+            attempts.append({"trust": label, "ok": False, "verify_code": e.verify_code, "verify_message": e.verify_message})
+        except Exception as e:  # noqa: BLE001
+            attempts.append({"trust": label, "ok": False, "error": type(e).__name__})
+    out["verification_attempts"] = attempts
+    return out
+
+
+def build_notes(res: dict[str, Any]) -> list[str]:
+    notes: list[str] = []
+    for key in ("imap", "smtp"):
+        ep = res.get(key, {})
+        if "connect_error" in ep:
+            notes.append(f"{key}: Verbindung nicht moeglich ({ep['connect_error'].get('error')}).")
+            continue
+        att = ep.get("verification_attempts", [])
+        okay = [a["trust"] for a in att if a.get("ok")]
+        if okay:
+            notes.append(f"{key}: Pruefung erfolgreich mit Vertrauensquelle '{okay[0]}' - gmx_probe.py waehlt sie automatisch.")
+            continue
+        codes = sorted({a.get("verify_message") for a in att if a.get("verify_message")})
+        notes.append(f"{key}: Pruefung scheiterte mit allen Quellen ({', '.join(codes) or 'siehe verification_attempts'}).")
+        chain = ep.get("chain", [])
+        if not chain:
+            continue
+        names = " -> ".join(str(c.get("subject_cn")) for c in chain)
+        top = chain[-1]
+        if top.get("self_signed"):
+            notes.append(
+                f"{key}: Kette (vom Server gesendet): {names}. Das oberste Zertifikat '{top.get('subject_cn')}' ist ein Root, "
+                "dem dieser Rechner nicht vertraut. Ist das keine oeffentliche CA, liegt vermutlich TLS-Inspektion vor "
+                "-> Root-CA exportieren und mit --cafile angeben."
+            )
+        else:
+            notes.append(
+                f"{key}: Kette (vom Server gesendet): {names}. Die Kette ist bis zu einem Cross-Zertifikat vollstaendig; es fehlt der "
+                f"Vertrauensanker '{top.get('issuer_cn')}' (ersatzweise der Root '{top.get('subject_cn')}') im Speicher, den Python sieht. "
+                "Abhilfe: 'pip install certifi' oder die Root-Datei der CA per --cafile angeben (Fingerabdruck beim Aussteller pruefen)."
+            )
+    return notes
+
+
+def tls_diagnose(args: argparse.Namespace) -> dict[str, Any]:
+    paths = ssl.get_default_verify_paths()
+    res: dict[str, Any] = {
+        "python": sys.version.split()[0],
+        "platform": sys.platform,
+        "openssl": ssl.OPENSSL_VERSION,
+        "default_verify_paths": {"cafile": paths.cafile, "capath": paths.capath},
+        "env_set": {k: bool(os.environ.get(k)) for k in ("SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE", "HTTPS_PROXY", "https_proxy")},
+        "certifi_available": certifi_path() is not None,
+        "utc_now": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    res["imap"] = tls_endpoint(args.imap_host, args.imap_port, False, args.cafile)
+    res["smtp"] = tls_endpoint(SMTP_HOST, SMTP_PORT, True, args.cafile)
+    res["notes"] = build_notes(res)
+    return res
 
 
 def parse_uid(data: Any, kind: str) -> list[int]:
@@ -169,8 +416,8 @@ class Probe:
         self.password = password
         self.args = args
         self.result: dict[str, Any] = {}
-        self.ctx = ssl.create_default_context()
-        self.ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+        self.ctx = make_context(args.cafile)
+        self.trust_source = "cafile" if args.cafile else "system"
         self.token = f"haprobe-{int(time.time())}"
         self.M: imaplib.IMAP4_SSL | None = None
         self.delim = "/"
@@ -195,16 +442,21 @@ class Probe:
     def connect(self) -> bool:
         t0 = time.monotonic()
         try:
-            if self.args.no_tls:
-                M: Any = imaplib.IMAP4(self.imap_host, self.imap_port, timeout=TIMEOUT)
-            else:
-                M = imaplib.IMAP4_SSL(self.imap_host, self.imap_port, ssl_context=self.ctx, timeout=TIMEOUT)
+            M = self.open_imap()
+        except TLSTrustError as e:
+            self.result["connect"] = {
+                "error": "SSLCertVerificationError: Zertifikat des Servers wird mit keiner Vertrauensquelle akzeptiert",
+                "trust_sources_tried": e.tried,
+                "hint": TLS_HINT,
+            }
+            return False
         except Exception as e:  # noqa: BLE001
             self.result["connect"] = err(e)
             return False
         self.M = M
         info: dict[str, Any] = {}
         if not self.args.no_tls:
+            info["trust_source"] = self.trust_source
             sock = M.sock
             cert = sock.getpeercert() or {}
             cn = None
@@ -213,7 +465,7 @@ class Probe:
                     if k == "commonName":
                         cn = v
             san = [v for k, v in cert.get("subjectAltName", ()) if k == "DNS"]
-            info = {
+            info |= {
                 "tls_version": sock.version(),
                 "cipher": sock.cipher()[0] if sock.cipher() else None,
                 "cert_cn": cn,
@@ -239,6 +491,23 @@ class Probe:
         self.caps = set(cap_line.upper().split())
         self.result["capability_post_login"] = sorted(self.caps)
         return True
+
+    def open_imap(self) -> Any:
+        """Open the IMAP connection. Tries trust sources in order; never disables verification."""
+        if self.args.no_tls:
+            return imaplib.IMAP4(self.imap_host, self.imap_port, timeout=TIMEOUT)
+        tried: list[dict[str, Any]] = []
+        for label, cafile in trust_candidates(self.args.cafile):
+            ctx = make_context(cafile)
+            try:
+                M = imaplib.IMAP4_SSL(self.imap_host, self.imap_port, ssl_context=ctx, timeout=TIMEOUT)
+            except ssl.SSLCertVerificationError as e:
+                tried.append({"trust": label, "verify_code": e.verify_code, "verify_message": e.verify_message})
+                continue
+            self.ctx = ctx
+            self.trust_source = label
+            return M
+        raise TLSTrustError(tried)
 
     def list_folders(self) -> None:
         M = self.M
@@ -345,10 +614,10 @@ class Probe:
         s = {}
         s["ascii_subject_Probe"] = self.uid_search("SUBJECT", "Probe")
         s["ascii_subject_lowercase_probe"] = self.uid_search("SUBJECT", "probe")
-        s["utf8_subject_Grüße"] = self.uid_search("SUBJECT", charset="UTF-8", literal="Grüße".encode("utf-8"))
-        s["utf8_subject_gruesse_lowercase"] = self.uid_search("SUBJECT", charset="UTF-8", literal="grüße".encode("utf-8"))
-        s["utf8_body_Übung"] = self.uid_search("BODY", charset="UTF-8", literal="Übung".encode("utf-8"))
-        s["utf8_text_Größe"] = self.uid_search("TEXT", charset="UTF-8", literal="Größe".encode("utf-8"))
+        s["utf8_subject_Gruesse"] = self.uid_search("SUBJECT", charset="UTF-8", literal="Grüße".encode("utf-8"))
+        s["utf8_subject_gruesse_lower"] = self.uid_search("SUBJECT", charset="UTF-8", literal="grüße".encode("utf-8"))
+        s["utf8_body_Uebung"] = self.uid_search("BODY", charset="UTF-8", literal="Übung".encode("utf-8"))
+        s["utf8_text_Groesse"] = self.uid_search("TEXT", charset="UTF-8", literal="Größe".encode("utf-8"))
         s["no_charset_body_ascii"] = self.uid_search("BODY", "probe")
         s["no_charset_text_ascii"] = self.uid_search("TEXT", "ascii")
         s["header_message_id"] = self.uid_search("HEADER", "Message-ID", self.token)
@@ -358,6 +627,7 @@ class Probe:
         s["seen"] = self.uid_search("SEEN")
         s["unseen"] = self.uid_search("UNSEEN")
         tests["search"] = s
+        tests["search_index_delay"] = self.search_index_delay()
 
         if "SORT" in self.caps:
             try:
@@ -387,14 +657,14 @@ class Probe:
         # COPY A -> B
         try:
             typ, data = M._simple_command("UID", "COPY", first or "1", quote(b))  # noqa: SLF001 (raw: keeps COPYUID)
-            tests["copy_to_b"] = {"status": typ, "copyuid_seen": bool(parse_uid(data, "COPYUID"))}
+            tests["copy_to_b"] = {"status": typ, "copyuid_seen": self.copyuid_seen(data)}
         except Exception as e:  # noqa: BLE001
             tests["copy_to_b"] = err(e)
         # MOVE A -> B (second message)
         if "MOVE" in self.caps and len(uids) > 1:
             try:
                 typ, data = M._simple_command("UID", "MOVE", uids[1].decode(), quote(b))  # noqa: SLF001
-                tests["move_to_b"] = {"status": typ, "copyuid_seen": bool(parse_uid(data, "COPYUID"))}
+                tests["move_to_b"] = {"status": typ, "copyuid_seen": self.copyuid_seen(data)}
             except Exception as e:  # noqa: BLE001
                 tests["move_to_b"] = err(e)
         else:
@@ -417,7 +687,179 @@ class Probe:
                     tests["uid_expunge"] = err(e)
             else:
                 tests["uid_expunge"] = "skipped (no UIDPLUS)"
+        tests["trash_move"] = self.trash_move_test()
+        try:
+            M.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def copyuid_seen(self, data: Any) -> dict[str, Any]:
+        """COPYUID may arrive in the tagged OK or as untagged '* OK [COPYUID ...]' (MOVE)."""
+        assert self.M
+        places: dict[str, Any] = {"tagged": bool(parse_uid(data, "COPYUID"))}
+        un = self.M.untagged_responses
+        found = False
+        for key in ("COPYUID", "OK"):
+            for item in un.get(key, []) or []:
+                raw = item if isinstance(item, bytes) else b""
+                if b"COPYUID" in raw or key == "COPYUID":
+                    found = True
+        places["in_untagged_store"] = found
+        return places
+
+    def search_index_delay(self) -> dict[str, Any]:
+        """Text search returned 0 hits right after APPEND: indexing delay or broken? Poll up to ~60 s."""
+        out: dict[str, Any] = {"polls": []}
+        t0 = time.monotonic()
+        for wait in (0, 5, 10, 15, 30):
+            if wait:
+                time.sleep(wait)
+            r = {
+                "t": round(time.monotonic() - t0, 1),
+                "body_probe": self.uid_search("BODY", "probe").get("hits"),
+                "text_ascii": self.uid_search("TEXT", "ascii").get("hits"),
+                "subject_probe": self.uid_search("SUBJECT", "probe").get("hits"),
+            }
+            out["polls"].append(r)
+            if r["body_probe"] and r["text_ascii"]:
+                break
+        return out
+
+    def find_token(self, token: str, seconds: float) -> dict[str, Any]:
+        """Find OUR message by Message-ID token in the selected folder. GMX search indexes new mail with up to ~30 s
+        delay, so poll; fall back to FETCH of the last 10 headers (index independent)."""
+        assert self.M
+        M = self.M
+        t0 = time.monotonic()
+        while True:
+            ids = M.uid("SEARCH", "HEADER", "Message-ID", token)[1][0].split()
+            if ids:
+                return {"ids": [i.decode() for i in ids], "via": "search", "after_s": round(time.monotonic() - t0, 1)}
+            allids = M.uid("SEARCH", "ALL")[1][0].split()[-10:]
+            hits = []
+            for u in allids:
+                typ, data = M.uid("FETCH", u.decode(), "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])")
+                blob = b" ".join(x[1] for x in (data or []) if isinstance(x, tuple))
+                if token.encode() in blob:
+                    hits.append(u.decode())
+            if hits:
+                return {"ids": hits, "via": "fetch_headers", "after_s": round(time.monotonic() - t0, 1)}
+            if time.monotonic() - t0 >= seconds:
+                return {"ids": [], "via": None, "after_s": round(time.monotonic() - t0, 1)}
+            time.sleep(5)
+
+    def trash_move_test(self) -> dict[str, Any]:
+        """Move one of OUR test messages to the real Trash folder, check counts, remove only that UID."""
+        M = self.M
+        assert M is not None
+        trash = [n for n, fl in self.special.items() if fl.lower() == "\\trash"]
+        if not trash:
+            return {"skipped": "no \\Trash folder"}
+        tname = utf7_encode(trash[0])
+        out: dict[str, Any] = {}
+        try:
+            if M.select(mb(self.b))[0] != "OK":
+                return {"skipped": "cannot select B"}
+            ids = M.uid("SEARCH", "ALL")[1][0].split()
+            if not ids:
+                return {"skipped": "no test message left in B"}
+            uid = ids[-1].decode()
+            M.close()
+            M.select(mb(tname), readonly=True)
+            before = self.count_all()
+            M.close()
+            M.select(mb(self.b))
+            typ, data = M._simple_command("UID", "MOVE" if "MOVE" in self.caps else "COPY", uid, quote(tname))  # noqa: SLF001
+            out["move_status"] = typ
+            out["copyuid"] = self.copyuid_seen(data)
+            if "MOVE" not in self.caps:
+                M.uid("STORE", uid, "+FLAGS", r"(\Deleted)")
+                M.expunge()
+            M.close()
+            M.select(mb(tname))
+            after = self.count_all()
+            out["trash_before"] = before
+            out["trash_after_move"] = after
+            found = self.find_token(self.token, 60)  # Suchindex ~30 s verzoegert -> pollen + Header-Fallback
+            out["our_message_in_trash"] = {"found": len(found["ids"]), "via": found["via"], "after_s": found["after_s"]}
+            for u in found["ids"]:
+                M.uid("STORE", u, "+FLAGS", r"(\Deleted)")
+                if "UIDPLUS" in self.caps:
+                    M.uid("EXPUNGE", u)
+            out["trash_after_cleanup"] = self.count_all()
+            M.close()
+        except Exception as e:  # noqa: BLE001
+            out["error"] = err(e)
+        return out
+
+    def inbox_search_probe(self) -> dict[str, Any]:
+        """Read-only searches in INBOX: hit counts and timing only, no content."""
+        M = self.M
+        assert M is not None
+        out: dict[str, Any] = {}
+        typ, _ = M.select("INBOX", readonly=True)
+        if typ != "OK":
+            return {"error": "cannot examine INBOX"}
+        out["total"] = self.count_all()
+        for key, crit in (
+            ("header_from_a", ("FROM", "a")),
+            ("subject_e", ("SUBJECT", "e")),
+            ("body_e", ("BODY", "e")),
+            ("text_e", ("TEXT", "e")),
+            ("since_30d", ("SINCE", imap_date(time.time() - 30 * 86400))),
+        ):
+            t = time.monotonic()
+            r = self.uid_search(*crit)
+            r["seconds"] = round(time.monotonic() - t, 2)
+            out[key] = r
         M.close()
+        return out
+
+    def idle_probe(self) -> dict[str, Any]:
+        """Hold an IDLE on INBOX for N minutes (re-issue never); report whether connection survived."""
+        minutes = self.args.idle_minutes
+        M = self.open_imap()
+        out: dict[str, Any] = {"requested_minutes": minutes}
+        try:
+            M.login(self.user, self.password)
+            M.select("INBOX", readonly=True)
+            tag = M._new_tag()  # noqa: SLF001
+            M.send(tag + b" IDLE\r\n")
+            first = M.readline()
+            out["continuation"] = first[:20].decode("utf-8", errors="replace")
+            t0 = time.monotonic()
+            lines: list[str] = []
+            sock = M.sock
+            while time.monotonic() - t0 < minutes * 60:
+                pending = getattr(sock, "pending", lambda: 0)()
+                if not pending and not select.select([sock], [], [], 30)[0]:
+                    continue
+                try:
+                    ln = M.readline()
+                except OSError as e:
+                    out["closed_by_server_after_s"] = round(time.monotonic() - t0)
+                    out["error"] = type(e).__name__
+                    break
+                if not ln:
+                    out["closed_by_server_after_s"] = round(time.monotonic() - t0)
+                    break
+                lines.append(ln[:30].decode("utf-8", errors="replace"))
+                if ln.startswith(b"* BYE"):
+                    out["closed_by_server_after_s"] = round(time.monotonic() - t0)
+                    break
+            else:
+                out["survived_s"] = round(time.monotonic() - t0)
+            out["untagged_seen"] = lines[:5]
+            try:
+                M.send(b"DONE\r\n")
+            except Exception:  # noqa: BLE001
+                pass
+        finally:
+            try:
+                M.logout()
+            except Exception:  # noqa: BLE001
+                pass
+        return out
 
     def cleanup_test_folders(self) -> None:
         M = self.M
@@ -453,6 +895,22 @@ class Probe:
             except Exception as e:  # noqa: BLE001
                 res[f"delete_folder_{i + 1}"] = err(e)
         self.result["cleanup"] = res
+
+    def cleanup_leftovers(self) -> dict[str, Any]:
+        """Delete test folders left over from an aborted run (exact names only)."""
+        M = self.M
+        assert M is not None
+        out: dict[str, Any] = {}
+        for plain in (f"{self.args.folder_prefix}-\u00c4A", f"{self.args.folder_prefix}-\u00c4Ax", f"{self.args.folder_prefix}-\u00c4B"):
+            if plain not in (self.folder_names or set()):
+                out[utf7_encode(plain)] = "not present"
+                continue
+            try:
+                typ, _ = M.delete(mb(utf7_encode(plain)))
+                out[utf7_encode(plain)] = typ
+            except Exception as e:  # noqa: BLE001
+                out[utf7_encode(plain)] = err(e)
+        return out
 
     def parallel_connections(self) -> dict[str, Any]:
         conns = []
@@ -524,7 +982,7 @@ class Probe:
                 S.quit()
             except Exception:  # noqa: BLE001
                 pass
-        time.sleep(self.args.send_wait)
+        time.sleep(3)
 
         sent_names = [n for n, fl in getattr(self, "special", {}).items() if fl.lower() == "\\sent"]
         if not sent_names:
@@ -536,13 +994,13 @@ class Probe:
                 if typ != "OK":
                     counts[label] = {"select": typ}
                     continue
-                typ, data = M.uid("SEARCH", "HEADER", "Message-ID", send_token)
-                ids = data[0].split() if data and data[0] else []
-                counts[label] = {"copies_found": len(ids)}
+                found = self.find_token(send_token, self.args.send_wait)
+                ids = found["ids"]
+                counts[label] = {"copies_found": len(ids), "via": found["via"], "after_s": found["after_s"]}
                 for u in ids:  # nur unsere eigenen Testmails loeschen
-                    M.uid("STORE", u.decode(), "+FLAGS", r"(\Deleted)")
+                    M.uid("STORE", u, "+FLAGS", r"(\Deleted)")
                     if "UIDPLUS" in self.caps:
-                        M.uid("EXPUNGE", u.decode())
+                        M.uid("EXPUNGE", u)
                     else:
                         counts[label]["note"] = "no UIDPLUS: marked \\Deleted only (not expunged)"
                 M.close()
@@ -569,9 +1027,13 @@ class Probe:
         try:
             self.step("namespace", lambda: self.M.namespace()[1][0].decode() if "NAMESPACE" in self.caps else "capability missing")  # type: ignore[union-attr]
             self.step("list", self.list_folders)
+            if self.args.cleanup_leftovers:
+                self.step("cleanup_leftovers", self.cleanup_leftovers)
+                return self.result
             self.step("status_inbox", self.status_inbox)
             if self.step("create_test_folders", self.create_test_folders) is True:
                 self.step("folder_tests_run", self.run_folder_tests)
+            self.step("inbox_search_probe", self.inbox_search_probe)
             if not self.args.no_parallel:
                 self.step("parallel_connections", self.parallel_connections)
             if not self.args.skip_smtp:
@@ -587,6 +1049,8 @@ class Probe:
                     self.M.logout()
                 except Exception:  # noqa: BLE001
                     pass
+        if self.args.idle_minutes:  # eigene Verbindung, nach dem Aufraeumen (GMX trennt IDLE nach ~30 min)
+            self.step("idle_probe", self.idle_probe)
         return self.result
 
     def sieve_port(self) -> dict[str, Any]:
@@ -608,19 +1072,26 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="GMX Live-Probe (Metadaten only)")
     ap.add_argument("--print-folders", action="store_true", help="alle Ordnernamen ausgeben")
     ap.add_argument("--send-self-test", action="store_true", help="genau 1 Mail an sich selbst senden und Gesendet-Kopie pruefen")
-    ap.add_argument("--send-wait", type=int, default=10, help="Sekunden Wartezeit nach dem Senden (Default 10)")
+    ap.add_argument("--send-wait", type=int, default=60, help="max. Sekunden, die nach dem Senden auf die Kopien gewartet wird (Default 60; GMX-Suchindex braucht bis ~30 s)")
     ap.add_argument("--no-parallel", action="store_true", help="Test paralleler Verbindungen auslassen")
     ap.add_argument("--parallel", type=int, default=3, help="zusaetzliche parallele Verbindungen (max 3)")
     ap.add_argument("--folder-prefix", default="HA-Probe", help="Praefix der Testordner")
     ap.add_argument("--imap-host", default=IMAP_HOST, help="nur fuer lokale Tests (Dovecot/GreenMail); Default imap.gmx.net")
     ap.add_argument("--imap-port", type=int, default=IMAP_PORT, help="nur fuer lokale Tests")
     ap.add_argument("--no-tls", action="store_true", help="Klartext-IMAP, nur fuer lokale Tests; nie gegen GMX")
+    ap.add_argument("--idle-minutes", type=int, default=0, help="IDLE auf INBOX so viele Minuten halten (z. B. 35) und pruefen, ob GMX die Verbindung trennt")
+    ap.add_argument("--cleanup-leftovers", action="store_true", help="nur Testordner eines abgebrochenen Laufs loeschen (exakte Namen HA-Probe-AeA/AeAx/AeB), sonst nichts")
     ap.add_argument("--skip-smtp", action="store_true", help="SMTP-Teil auslassen")
+    ap.add_argument("--cafile", default=None, help="eigene CA-Datei (PEM oder einzelnes DER-.cer), z. B. Root-CA des Ausstellers oder eines Proxys")
+    ap.add_argument("--tls-diagnose", action="store_true", help="nur Zertifikatskette und Vertrauensquellen pruefen (keine Zugangsdaten)")
     args = ap.parse_args()
 
     if args.no_tls and args.imap_host.endswith("gmx.net"):
         print(json.dumps({"error": "--no-tls ist gegen GMX nicht erlaubt"}), file=sys.stderr)
         return 2
+    if args.tls_diagnose:
+        print(json.dumps(tls_diagnose(args), indent=1, ensure_ascii=True, default=str))
+        return 0
     user = os.environ.get("GMX_USER", "")
     password = os.environ.get("GMX_PASS", "")
     if not user or not password:
@@ -628,7 +1099,7 @@ def main() -> int:
         return 2
 
     result = Probe(user, password, args).run()
-    print(json.dumps(result, indent=1, ensure_ascii=False, default=str))
+    print(json.dumps(result, indent=1, ensure_ascii=True, default=str))
     return 0 if result.get("login", {}).get("ok") else 1
 
 

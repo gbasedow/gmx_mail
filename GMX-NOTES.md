@@ -12,33 +12,38 @@ wurde nicht gefunden. „Vollständiges Management“ bedeutet hier: alles, was 
 
 | # | Thema | Befund | Quelle | Verl. | LIVE | Ergebnis |
 |---|---|---|---|---|---|---|
-| 1 | IMAP | `imap.gmx.net:993`, implizites TLS; Fallback Port 143 mit STARTTLS (sonst unverschlüsselt) | hilfe.gmx.net/pop-imap/imap/imap-serverdaten.html | O | – | |
-| 2 | SMTP | `mail.gmx.net:587` STARTTLS; alternativ 465 SSL | dto. | O | – | |
-| 3 | TLS | nur TLS 1.2/1.3; 1.0/1.1 nicht mehr unterstützt | dto. | O | Zertifikat/CN prüfen | |
-| 4 | Login | Benutzername = volle E-Mail-Adresse (auch bei @gmx.de) | GMX-Hilfe (Outlook/Live Mail), Drittquellen | O/D | – | |
-| 5 | Aktivierung | POP3/IMAP ab Werk aus. Einschalten: Initialen > E-Mail-Einstellungen > E-Mail empfangen > POP3/IMAP > „POP3- und IMAP-Zugriff erlauben“ | hilfe.gmx.net/pop-imap/einschalten.html | O | – | |
-| 6 | Auto-Abschaltung | „Wenn Sie das E-Mail-Programm längere Zeit nicht verwenden, wird der Abruf über POP3 bzw. IMAP … automatisch ausgeschaltet“. Keine Frist genannt. Wiedereinschalten: „die zwei angezeigten Symbole übereinander schieben“ (interaktiv, nicht automatisierbar). Symptom beim Client: „Kennwort falsch“. Forum: Abschaltung „alle 4 Wochen“ trotz täglichem Abruf; GMX-Mail „Abschaltung POP/IMAP zum 09.01.2024“ mit Hinweis, man müsse in der GMX Mail App angemeldet sein. Ob ein Dauer-IDLE als Nutzung zählt, ist zweifelhaft. | hilfe.gmx.net/pop-imap/kein-versand-mailprogramm.html; heise; thunderbird-mail.de Thread 93637 | O/D | Frist unbekannt | |
-| 7 | App-Passwort | Account verwalten > Login & Sicherheit > App-Passwörter (für externe Apps). Einmalige Anzeige, löschbar, neu erstellbar. Gilt auch für CalDAV/CardDAV/WebDAV (Scope nicht nur Mail). | hilfe.gmx.net/sicherheit/2fa/anwendungsspezifisches-passwort.html; gmx.net/mail/sicherheit/zwei-faktor-authentifizierung/ | O | Anzahl, Fehlertext | |
+| 1 | IMAP | `imap.gmx.net:993`, implizites TLS; Fallback Port 143 mit STARTTLS (sonst unverschlüsselt) | hilfe.gmx.net/pop-imap/imap/imap-serverdaten.html | O | – | ✔ 993/TLS funktioniert (Zertifikat CN `mail.gmx.net`, passt zu `imap.gmx.net`; Kette Telekom Security → T-TeleSec GlobalRoot Class 3, siehe Abschnitt 4). Port 143 nicht getestet. |
+| 2 | SMTP | `mail.gmx.net:587` STARTTLS; alternativ 465 SSL | dto. | O | – | ✔ 587: EHLO vor TLS nur `8BITMIME SIZE STARTTLS`, nach TLS `8BITMIME AUTH SIZE`; Login ok. 465 nicht getestet. |
+| 3 | TLS | nur TLS 1.2/1.3; 1.0/1.1 nicht mehr unterstützt | dto. | O | Zertifikat/CN prüfen | ✔ TLS 1.3, `TLS_AES_256_GCM_SHA384`. |
+| 4 | Login | Benutzername = volle E-Mail-Adresse (auch bei @gmx.de) | GMX-Hilfe (Outlook/Live Mail), Drittquellen | O/D | – | ✔ Login mit voller Adresse und App-Passwort ok (0,4 s). |
+| 5 | Aktivierung | POP3/IMAP ab Werk aus. Einschalten: Initialen > E-Mail-Einstellungen > E-Mail empfangen > POP3/IMAP > „POP3- und IMAP-Zugriff erlauben“ | hilfe.gmx.net/pop-imap/einschalten.html | O | – | ✔ (IMAP war freigeschaltet). |
+| 6 | Auto-Abschaltung | „Wenn Sie das E-Mail-Programm längere Zeit nicht verwenden, wird der Abruf über POP3 bzw. IMAP … automatisch ausgeschaltet“. Keine Frist genannt. Wiedereinschalten: „die zwei angezeigten Symbole übereinander schieben“ (interaktiv, nicht automatisierbar). Symptom beim Client: „Kennwort falsch“. Forum: Abschaltung „alle 4 Wochen“ trotz täglichem Abruf; GMX-Mail „Abschaltung POP/IMAP zum 09.01.2024“ mit Hinweis, man müsse in der GMX Mail App angemeldet sein. Ob ein Dauer-IDLE als Nutzung zählt, ist zweifelhaft. | hilfe.gmx.net/pop-imap/kein-versand-mailprogramm.html; heise; thunderbird-mail.de Thread 93637 | O/D | Frist unbekannt | Offen: Frist weiter unbekannt; Langzeitbeobachtung nötig. |
+| 7 | App-Passwort | Account verwalten > Login & Sicherheit > App-Passwörter (für externe Apps). Einmalige Anzeige, löschbar, neu erstellbar. Gilt auch für CalDAV/CardDAV/WebDAV (Scope nicht nur Mail). | hilfe.gmx.net/sicherheit/2fa/anwendungsspezifisches-passwort.html; gmx.net/mail/sicherheit/zwei-faktor-authentifizierung/ | O | Anzahl, Fehlertext | ✔ App-Passwort „probe“ funktioniert für IMAP und SMTP. Maximalzahl/Fehlertext nicht getestet. |
 | 8 | 2FA | Mit aktiver 2FA ist für POP3/IMAP nur ein App-Passwort möglich | gmx.net 2FA-Seite | O | – | |
 | 9 | Länder | Zugriff außerhalb Europas/USA/Kanada nur mit App-Passwort | hilfe.gmx.net/pop-imap/kein-versand-mailprogramm.html | O | – | |
-| 10 | CAPABILITY (vor Login) | `IMAP4rev1 CHILDREN ENABLE ID IDLE LIST-EXTENDED LIST-STATUS LITERAL- MOVE NAMESPACE SASL-IR SORT SPECIAL-USE THREAD=ORDEREDSUBJECT UIDPLUS UNSELECT WITHIN` plus `STARTTLS LOGINDISABLED` (143) bzw. `AUTH=LOGIN AUTH=PLAIN` (TLS) | eM-Client-Forum 11/2022; mailcow Issue #5778 (03/2024); Pegasus-Mail-Forum 12/2025 (nur Snippet) | D | Liste nach Login | |
-| 11 | Fehlende Capabilities | kein CONDSTORE/QRESYNC, QUOTA, ESEARCH, UTF8=ACCEPT, COMPRESS, THREAD=REFERENCES, X-GM-EXT | dto. (Abwesenheit im Banner) | D | ja | |
-| 12 | Historie | 2009: nur `IDLE UNSELECT LITERAL+`; UIDPLUS funktionierte, wurde aber nicht gemeldet | bugs.kde.org 204653 | D | – | |
+| 10 | CAPABILITY (vor Login) | `IMAP4rev1 CHILDREN ENABLE ID IDLE LIST-EXTENDED LIST-STATUS LITERAL- MOVE NAMESPACE SASL-IR SORT SPECIAL-USE THREAD=ORDEREDSUBJECT UIDPLUS UNSELECT WITHIN` plus `STARTTLS LOGINDISABLED` (143) bzw. `AUTH=LOGIN AUTH=PLAIN` (TLS) | eM-Client-Forum 11/2022; mailcow Issue #5778 (03/2024); Pegasus-Mail-Forum 12/2025 (nur Snippet) | D | Liste nach Login | ✔ bestätigt, identisch (vor Login `AUTH=LOGIN AUTH=PLAIN`, `LOGINDISABLED`-Frage bei 143 offen). |
+| 11 | Fehlende Capabilities | kein CONDSTORE/QRESYNC, QUOTA, ESEARCH, UTF8=ACCEPT, COMPRESS, THREAD=REFERENCES, X-GM-EXT | dto. (Abwesenheit im Banner) | D | ja | ✔ Nach Login: `APPENDLIMIT=29360128 CHILDREN ENABLE ID IDLE IMAP4REV1 LIST-EXTENDED LIST-STATUS LITERAL- MOVE NAMESPACE SASL-IR SORT SPECIAL-USE THREAD=ORDEREDSUBJECT UIDPLUS UNSELECT WITHIN`. Kein CONDSTORE/QRESYNC/QUOTA/ESEARCH/UTF8=ACCEPT/COMPRESS. **Neu:** `APPENDLIMIT` ≈ 28 MiB (Obergrenze für APPEND/Entwürfe mit Anhang). |
+| 12 | Historie | 2009: nur `IDLE UNSELECT LITERAL+`; UIDPLUS funktionierte, wurde aber nicht gemeldet | bugs.kde.org 204653 | D | – | ✔ UIDPLUS wird heute gemeldet; `APPENDUID` und `UID EXPUNGE` funktionieren. |
 | 13 | Server-Software | Begrüßung früher „GMX IMAP4 StreamProxy“, heute „IMAP server ready H migmx…“ | KDE-Bug, Foren | D | – | |
-| 14 | Ordner (IMAP) | `Gesendet`, `Entwürfe`, `Gelöscht`, `Spamverdacht` (Live-Mail-Anleitung); neuere Hilfe spricht von „Papierkorb“/„Spam“; Thunderbird legte früher zusätzlich `Sent` an. **Quellen widersprechen sich.** | hilfe.gmx.net/pop-imap/imap/livemail.html; hilfe.gmx.net/email/ordner/systemordner.html; heise | O (Widerspruch) | SPECIAL-USE + Trennzeichen | |
-| 15 | Umlaute in Ordnernamen | `Entwürfe` = modifiziertes UTF-7 `Entw&APw-rfe` (RFC 3501 5.1.3) | RFC 3501; bugzilla.mozilla.org 255541 | D | ja | |
-| 16 | Papierkorb | Löschen -> Papierkorb; Löschen im Papierkorb = endgültig; Aufbewahrung „standardmäßig unbegrenzt“ (älteres Drittzitat: 1 Tag) | hilfe.gmx.net/email/verwalten-und-suchen/emails-im-papierkorb.html | O | IMAP-Verhalten von `\Deleted` | |
+| 14 | Ordner (IMAP) | `Gesendet`, `Entwürfe`, `Gelöscht`, `Spamverdacht` (Live-Mail-Anleitung); neuere Hilfe spricht von „Papierkorb“/„Spam“; Thunderbird legte früher zusätzlich `Sent` an. **Quellen widersprechen sich.** | hilfe.gmx.net/pop-imap/imap/livemail.html; hilfe.gmx.net/email/ordner/systemordner.html; heise | O (Widerspruch) | SPECIAL-USE + Trennzeichen | ✔ `Entwürfe` (\Drafts, \NoInferiors), `Gelöscht` (\Trash), `Gesendet` (\Sent, \NoInferiors), `Spamverdacht` (\Junk, \NoInferiors); Konto hat 7 Ordner; Trennzeichen `/`. Die ältere Benennung gilt also weiterhin; SPECIAL-USE wird per `LIST` und `LIST (SPECIAL-USE)` geliefert. |
+| 15 | Umlaute in Ordnernamen | `Entwürfe` = modifiziertes UTF-7 `Entw&APw-rfe` (RFC 3501 5.1.3) | RFC 3501; bugzilla.mozilla.org 255541 | D | ja | ✔ Testordner `HA-Probe-ÄA/ÄB` (modifiziertes UTF-7) anlegen, umbenennen, löschen funktioniert. |
+| 16 | Papierkorb | Löschen -> Papierkorb; Löschen im Papierkorb = endgültig; Aufbewahrung „standardmäßig unbegrenzt“ (älteres Drittzitat: 1 Tag) | hilfe.gmx.net/email/verwalten-und-suchen/emails-im-papierkorb.html | O | IMAP-Verhalten von `\Deleted` | ✔ `\Deleted` + `UID EXPUNGE` im Testordner funktioniert. `UID MOVE` nach `Gelöscht` funktioniert (Zähler 5 → 6). Expunge dort ungetestet (Suche wegen Indexverzögerung leer, Skript v3c behoben). |
 | 17 | Spam | Aufbewahrung 30 Tage; Löschen dort „sofort endgültig“ | GMX-Hilfe „E-Mails nicht finden“, Papierkorb-Seite | O | – | |
 | 18 | Ordnerfristen | pro Ordner einstellbar (Posteingang, Papierkorb, Spam, Gesendet, Entwürfe, eigene) | hilfe.gmx.net/email/ordner/aufbewahrungszeit-festlegen.html | O | – | |
-| 19 | Anhänge | FreeMail 20 MB, ProMail 50 MB, TopMail 100 MB | hilfe.gmx.net/email/empfangen-und-lesen/dateianhaenge.html | O | SMTP-`SIZE` prüfen | |
+| 19 | Anhänge | FreeMail 20 MB, ProMail 50 MB, TopMail 100 MB | hilfe.gmx.net/email/empfangen-und-lesen/dateianhaenge.html | O | SMTP-`SIZE` prüfen | ✔ SMTP `SIZE` 141557760 (≈ 135 MiB, Server-Limit; Kontolimit gilt trotzdem). |
 | 20 | Versandlimits | Nicht veröffentlicht (PC-Welt 03/2022: „keine Auskunft“). JAM-Software (SmartSerialMail-FAQ): „dynamisch vom MailSecurity-Team angepasst“, „Maximal 11 Empfänger pro Stunde bei Verwendung einer E-Mail Client Anwendung“ – von GMX nicht bestätigt | pcwelt.de; manuals.jam-software.de | D/U | **nicht testen** (Sperrrisiko) | |
 | 21 | Absender | Nur nachweislich eigene Adressen als Absender verwenden | imap-serverdaten.html | O | Alias-Versand | |
-| 22 | Gesendet-Kopie | Unklar: Foren berichten fehlende **und** doppelte Kopien | heise; thunderbird-mail.de Thread 66525 | D/U | **Kernfrage** (`--send-self-test`) | |
-| 23 | Verbindungslimit | Keine offizielle Zahl. Forum (2019): Standard von 5 Verbindungen funktioniert auch bei GMX | thunderbird-mail.de Thread 83066 | D/U | ja (vorsichtig, max. 4 parallel) | |
-| 24 | Filterregeln/Sieve | Keine API/ManageSieve gefunden; Webmail-Filter per IMAP nicht sichtbar | keine Quelle | U | Port 4190 prüfen | |
-| 25 | SEARCH | Verhalten bei `CHARSET UTF-8`, BODY/TEXT, Groß-/Kleinschreibung, Performance: keine Quelle. Warnbeispiel: Strato-IMAP lieferte seit Mitte 2026 für jede SEARCH ein leeres Ergebnis (imap-mcp-server Issue #138) | – | U | **ja** | |
-| 26 | Flags | 2009: `PERMANENTFLAGS (\Answered \Flagged \Draft \Deleted \Seen)`, also kein `\*` = keine eigenen Keywords | bugs.kde.org 204653 | D (alt) | **ja** | |
-| 27 | Quota | Keine QUOTA-Capability -> Speicherfüllstand per IMAP nicht abfragbar | siehe Zeile 11 | D | ja | |
+| 22 | Gesendet-Kopie | Unklar: Foren berichten fehlende **und** doppelte Kopien | heise; thunderbird-mail.de Thread 66525 | D/U | **Kernfrage** (`--send-self-test`) | ✔ **Lauf 3:** Eine per SMTP an die eigene Adresse gesendete Mail kam im Posteingang an (per Header-Abgleich nach 0,8 s gefunden), aber **0 Kopien in `Gesendet`** nach 64 s (Suche und Abgleich der letzten 10 Header). GMX legt über SMTP **keine** Gesendet-Kopie an → Client muss sie per IMAP `APPEND` mit `\Seen` ablegen. Einmaliger Test mit einer Selbstmail; Verhalten bei fremden Empfängern nicht getestet. |
+| 23 | Verbindungslimit | Keine offizielle Zahl. Forum (2019): Standard von 5 Verbindungen funktioniert auch bei GMX | thunderbird-mail.de Thread 83066 | D/U | ja (vorsichtig, max. 4 parallel) | ✔ 4 parallele Verbindungen (Hauptverbindung + 3) gleichzeitig angemeldet. Höhere Zahlen nicht getestet; Entwurf bleibt bei max. 2. |
+| 24 | Filterregeln/Sieve | Keine API/ManageSieve gefunden; Webmail-Filter per IMAP nicht sichtbar | keine Quelle | U | Port 4190 prüfen | ✔ Port 4190 auf `imap.gmx.net` und `mail.gmx.net`: Timeout → kein ManageSieve. |
+| 25 | SEARCH | Verhalten bei `CHARSET UTF-8`, BODY/TEXT, Groß-/Kleinschreibung, Performance: keine Quelle. Warnbeispiel: Strato-IMAP lieferte seit Mitte 2026 für jede SEARCH ein leeres Ergebnis (imap-mcp-server Issue #138) | – | U | **ja** | ✔ **Geklärt (Lauf 2):** GMX indexiert neue Nachrichten verzögert. In frisch per APPEND angelegten Mails traten Textsuchen erst nach ca. 30 s zuverlässig auf (bei 5 s und 15 s wechselhaft 0/1 Treffer, bei 31 s alle Treffer). Im Bestand (3418 Mails im Posteingang) funktioniert die Serversuche einwandfrei und schnell: FROM 1,1 s, SUBJECT 1,2 s, BODY 0,5 s, TEXT 1,5 s, SINCE 0,04 s. Konsequenz: neue Mails sind kurz nach Eingang per Textsuche evtl. nicht auffindbar → Fallback über FETCH/Header oder Datumssuche. |
+| 26 | Flags | 2009: `PERMANENTFLAGS (\Answered \Flagged \Draft \Deleted \Seen)`, also kein `\*` = keine eigenen Keywords | bugs.kde.org 204653 | D (alt) | **ja** | ✔ `PERMANENTFLAGS (\Answered \Flagged \Draft \Deleted \Seen \*)`; eigenes Keyword `haprobe` per STORE gesetzt und per `SEARCH KEYWORD` gefunden. Die Angabe von 2009 ist veraltet. |
+| 27 | Quota | Keine QUOTA-Capability -> Speicherfüllstand per IMAP nicht abfragbar | siehe Zeile 11 | D | ja | ✔ bestätigt: keine QUOTA-Capability. |
+| 28 | MOVE/COPY | `UID MOVE` und `UID COPY` in Testordner funktionieren. `COPYUID` kam bei MOVE **nicht** im getaggten OK (Probe v3 prüft, ob er als ungetaggtes `* OK [COPYUID …]` kommt). | Probe 20.11.2026 | – | ✔ | Verhalten: nach MOVE Ziel-UID ggf. per `HEADER Message-ID` ermitteln. |
+| 29 | Flags/Datumssuche | `SEEN`, `UNSEEN`, `LARGER`, `SMALLER`, `SINCE`, `KEYWORD` funktionieren; `SORT (REVERSE DATE)` funktioniert. | Probe 20.11.2026 | – | ✔ | |
+| 30 | Verbindungsaufbau | Login 0,4 s; TLS-Vertrauen unter Windows mit python.org-Python ohne `certifi` nicht gegeben (Zwischenzertifikate fehlen im Windows-Speicher). | Probe, tls-diagnose | – | ✔ | Integration läuft in HA (certifi vorhanden). |
+| 31 | IDLE | IDLE funktioniert (`+ idling`). Nach **1812 s (≈ 30 min)** ohne Aktivität sendet GMX `* BYE timeout` und trennt. | Probe Lauf 2 | – | ✔ | IDLE spätestens alle 20–25 min neu starten; gilt auch für Hauptverbindung ohne Aktivität (NOOP). |
+| 32 | Idle-Timeout allgemein | Eine ruhende Verbindung (während des 30-min-IDLE-Tests nicht genutzt) wurde ebenfalls getrennt (`EOF`). | Probe Lauf 2 | – | ✔ | Arbeitsverbindung bei Fehler automatisch neu aufbauen, nie Dauerverbindung voraussetzen. |
 
 ### Widersprüche zwischen Quellen (nicht aufgelöst)
 
@@ -50,13 +55,16 @@ wurde nicht gefunden. „Vollständiges Management“ bedeutet hier: alles, was 
 
 1. Login-Fehler = „IMAP evtl. abgeschaltet **oder** Passwort falsch“: gemeinsamer Reauth-Pfad + Repair-Issue `imap_possibly_disabled` mit Anleitung.
 2. Ordner über SPECIAL-USE erkennen; Heuristik und Options-Override als Rückfallebenen; Ordnernamen immer in modifiziertem UTF-7 kodieren/dekodieren.
-3. SEARCH zuerst mit `CHARSET UTF-8` versuchen; bei Ablehnung Warnung und ASCII-Fallback. Bei leeren Ergebnissen trotz erwartbarer Treffer
-   (Strato-Muster) clientseitigen Fallback über FETCH der Header erwägen – nach M0 entscheiden.
+3. SEARCH: Neue Mails sind per Textsuche erst nach ≈ 30 s auffindbar, Bestand wird schnell durchsucht (Zeile 25). Daher: Suchaktion mit Feldern `from`, `to`, `subject`, `since`, `before`, `flags`, `size` implementieren, aber **Selbsttest/Fallback**
+   einbauen: liefert die Serversuche 0 Treffer, zusätzlich die jüngsten Nachrichten (Datum der letzten ~2 Minuten) per `FETCH` der Header clientseitig prüfen und
+   `search_mode` in der Antwort melden. Kein stilles „keine Treffer“ für sehr frische Mails.
 4. Kein QUOTA, kein CONDSTORE: kein Speichersensor, Änderungserkennung über UID/UIDVALIDITY und IDLE.
-5. Eigene Keywords nur, wenn PERMANENTFLAGS `\*` enthält.
-6. Gesendet-Kopie: Option `sent_copy_mode: auto|append|none`, Entscheidung nach dem Test (Zeile 22).
+5. Eigene Keywords sind erlaubt (`\*` vorhanden), trotzdem nur wenn PERMANENTFLAGS `\*` enthält prüfen und sonst abschalten.
+5a. `COPYUID` nach MOVE nicht voraussetzen; Ziel-UID bei Bedarf per Message-ID suchen. `APPENDLIMIT` (≈ 28 MiB) für Entwürfe/Anhänge beachten.
+6. Gesendet-Kopie: GMX legt per SMTP keine Kopie an (Zeile 22) → Standard `sent_copy_mode: append` (IMAP `APPEND` in den `\Sent`-Ordner mit `\Seen`); Optionen `auto` (nach kurzer Prüfung per Header-Abgleich, nur anhängen wenn fehlend) und `none`.
 7. Nie mailbox-weites EXPUNGE; nur UID EXPUNGE mit UIDPLUS.
-8. Konservative Versandlimits als Standard (Tageslimit, Empfänger pro Mail), unabhängig von GMX-Angaben.
+8. Verbindungen: IDLE alle ≤ 25 min neu starten, ruhende Verbindungen werden nach ≈ 30 min getrennt → automatischer Reconnect.
+9. Konservative Versandlimits als Standard (Tageslimit, Empfänger pro Mail), unabhängig von GMX-Angaben.
 
 ## 3. Live-Testplan (M0)
 
@@ -88,7 +96,18 @@ Manuelle Zusatztests (nicht vom Skript abgedeckt):
 4. Versand von einer Alias-Adresse testen (falls vorhanden).
 5. Nach einigen Wochen prüfen, ob die IMAP-Abschaltung eintritt (Datum der letzten Nutzung notieren).
 
-### Ergebnisfeld (nach dem Lauf ausfüllen)
+## 4. Ergebnis M0 (Lauf vom 20.11.2026, Probe v2)
+
+- Datei: `docs/probe-2026-11-20.json` (bereinigt: ohne Postfachzähler und UIDVALIDITY).
+- TLS-Kette: `mail.gmx.net` → Telekom Security OV RSA CA 26A → TLS RSA Root 2023 (cross-signiert von T-TeleSec GlobalRoot Class 3).
+  Python mit leerem Windows-Zertifikatsspeicher scheitert; `certifi` löst es. Verifikation wird nie abgeschaltet.
+- Alle Kernfunktionen (Ordner, APPEND, MOVE, COPY, Flags, Keywords, UID EXPUNGE, parallele Verbindungen, SMTP-Login) funktionieren.
+- Lauf 2 (`docs/probe-2026-11-20-idle.json`): Textsuche = Indexverzögerung ≈ 30 s bei neuen Mails (Zeile 25); IDLE/Verbindung wird nach ≈ 30 min getrennt (Zeile 31).
+  Skriptfehler im Papierkorb-Test und im Aufräumen sind behoben (v3b).
+- Lauf 3 (`docs/probe-2026-11-20-v4.json`): SMTP legt **keine** Gesendet-Kopie an (Zeile 22); `MOVE` in `Gelöscht` funktioniert (Zeile 16); Aufräumen sauber.
+- Noch offen: Dauer der IMAP-Abschaltung (Langzeitbeobachtung). Expunge im Papierkorb bleibt ungetestet; v1 löscht standardmäßig nie dauerhaft.
+
+### Ergebnisfeld (Vorlage für Folgeläufe)
 
 ```
 Datum:

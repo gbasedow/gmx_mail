@@ -28,3 +28,40 @@ jobs:
         run: pytest -q --cov=custom_components.gmx_mail --cov-report=term-missing
       - name: Probe script tests
         run: pytest -q -p no:homeassistant tests/probe
+
+  server-tests:
+    # Read operations against a real IMAP server (GreenMail); never a real mail account.
+    runs-on: ubuntu-latest
+    services:
+      greenmail:
+        image: greenmail/standalone:2.1.3
+        env:
+          GREENMAIL_OPTS: >-
+            -Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0
+            -Dgreenmail.users=test:secret@example.test -Dgreenmail.users.login=email
+        ports:
+          - 3143:3143
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Install dependencies
+        run: pip install -r requirements_dev.txt
+      - name: Wait for GreenMail
+        run: |
+          python - <<'PY'
+          import imaplib, time
+          for _ in range(60):
+              try:
+                  imaplib.IMAP4("127.0.0.1", 3143).logout()
+                  break
+              except (OSError, imaplib.IMAP4.error):  # port open before the server answers -> abort
+                  time.sleep(2)
+          else:
+              raise SystemExit("GreenMail did not start")
+          PY
+      - name: Server tests
+        env:
+          REQUIRE_GREENMAIL: "1"
+        run: pytest -q -p no:homeassistant -m integration tests/integration

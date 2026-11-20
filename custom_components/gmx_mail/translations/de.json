@@ -175,6 +175,25 @@
         "auto": "Nur ablegen, wenn sie fehlt",
         "none": "Keine Kopie"
       }
+    },
+    "sort": {
+      "options": {
+        "date_desc": "Neueste zuerst",
+        "date_asc": "Älteste zuerst"
+      }
+    },
+    "body_format": {
+      "options": {
+        "text": "Text (bevorzugt)",
+        "html_as_text": "HTML als Text",
+        "raw_headers": "Alle Kopfzeilen"
+      }
+    },
+    "attachment_mode": {
+      "options": {
+        "save": "Als Datei speichern",
+        "base64": "Als base64 liefern"
+      }
     }
   },
   "exceptions": {
@@ -186,12 +205,221 @@
     },
     "tls_error": {
       "message": "Die verschlüsselte Verbindung zum GMX-Mailserver ist fehlgeschlagen."
+    },
+    "permission_disabled": {
+      "message": "Die Rechtestufe „{permission}“ ist in den Optionen dieses Kontos nicht freigegeben."
+    },
+    "auth_failed": {
+      "message": "GMX hat die Anmeldung abgelehnt. Die Integration neu anmelden; eventuell wurde der POP3/IMAP-Zugriff abgeschaltet."
+    },
+    "folder_not_found": {
+      "message": "Der Ordner „{folder}“ existiert nicht oder kann nicht geöffnet werden."
+    },
+    "uidvalidity_changed": {
+      "message": "Der Ordner wurde auf dem Server neu aufgebaut (UIDVALIDITY geändert). Bitte erneut suchen, um gültige Referenzen zu erhalten."
+    },
+    "message_not_found": {
+      "message": "Die Nachricht existiert in diesem Ordner nicht mehr."
+    },
+    "attachment_not_found": {
+      "message": "Die Nachricht hat keinen Teil mit dieser ID."
+    },
+    "attachment_too_large": {
+      "message": "Der Anhang ist größer als erlaubt (max_bytes; base64 höchstens 256 KB)."
+    },
+    "search_rejected": {
+      "message": "Der Server hat die Suchkriterien abgelehnt."
+    },
+    "imap_error": {
+      "message": "Der IMAP-Server hat einen Fehler gemeldet."
+    },
+    "invalid_cursor": {
+      "message": "Der Cursor ist ungültig oder gehört zu einer anderen Suche."
+    },
+    "path_not_allowed": {
+      "message": "Der Medienordner ist in Home Assistant kein erlaubter Pfad (allowlist_external_dirs)."
     }
   },
   "issues": {
     "imap_possibly_disabled": {
       "title": "GMX-Anmeldung für {account} abgelehnt",
       "description": "GMX hat die Anmeldung abgelehnt. GMX schaltet den POP3/IMAP-Zugriff nach längerer Nichtnutzung automatisch ab und meldet dann denselben Fehler wie bei einem falschen Passwort.\n\n1. Im GMX-Webmailer anmelden.\n2. E-Mail-Einstellungen > POP3/IMAP öffnen und den POP3- und IMAP-Zugriff erlauben (GMX verlangt dabei eine Sicherheitsabfrage).\n3. Falls das App-Passwort gelöscht wurde, unter Account > Login & Sicherheit > App-Passwörter ein neues anlegen.\n4. Danach die Integration unter Einstellungen > Geräte & Dienste neu anmelden."
+    }
+  },
+  "services": {
+    "list_folders": {
+      "name": "Ordner auflisten",
+      "description": "Listet alle Ordner mit ihrer Rolle (Posteingang, Gesendet, Entwürfe, Papierkorb, Spam).",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Der GMX-Mail-Konfigurationseintrag."
+        },
+        "include_counts": {
+          "name": "Anzahl mitliefern",
+          "description": "Zusätzlich Anzahl der Nachrichten und der ungelesenen Nachrichten je Ordner (ein STATUS-Befehl je Ordner)."
+        }
+      }
+    },
+    "search": {
+      "name": "Nachrichten suchen",
+      "description": "Durchsucht einen Ordner und liefert Kurzinfos seitenweise. Neue Nachrichten erscheinen im GMX-Volltextindex erst nach etwa 30 Sekunden; jüngste Nachrichten werden dann anhand ihrer Kopfzeilen geprüft.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Der GMX-Mail-Konfigurationseintrag."
+        },
+        "folder": {
+          "name": "Ordner",
+          "description": "Ordnerpfad, z. B. INBOX oder Gesendet."
+        },
+        "from": {
+          "name": "Von",
+          "description": "Text im Absender."
+        },
+        "to": {
+          "name": "An",
+          "description": "Text in den Empfängern."
+        },
+        "cc": {
+          "name": "CC",
+          "description": "Text in den CC-Empfängern."
+        },
+        "subject": {
+          "name": "Betreff",
+          "description": "Text im Betreff."
+        },
+        "text": {
+          "name": "Text",
+          "description": "Text in Kopfzeilen oder Inhalt."
+        },
+        "body": {
+          "name": "Inhalt",
+          "description": "Text im Inhalt."
+        },
+        "since": {
+          "name": "Seit",
+          "description": "Empfangen an oder nach diesem Datum."
+        },
+        "before": {
+          "name": "Vor",
+          "description": "Empfangen vor diesem Datum."
+        },
+        "seen": {
+          "name": "Gelesen",
+          "description": "Nur gelesene (true) oder ungelesene (false) Nachrichten."
+        },
+        "flagged": {
+          "name": "Markiert",
+          "description": "Nur markierte (true) oder nicht markierte (false) Nachrichten."
+        },
+        "answered": {
+          "name": "Beantwortet",
+          "description": "Nur beantwortete (true) oder unbeantwortete (false) Nachrichten."
+        },
+        "draft": {
+          "name": "Entwurf",
+          "description": "Nur Entwürfe (true) oder keine Entwürfe (false)."
+        },
+        "larger": {
+          "name": "Größer als",
+          "description": "Mindestgröße in Byte."
+        },
+        "smaller": {
+          "name": "Kleiner als",
+          "description": "Höchstgröße in Byte."
+        },
+        "keyword": {
+          "name": "Schlüsselwort",
+          "description": "Nachrichten mit diesem IMAP-Schlüsselwort."
+        },
+        "uid_range": {
+          "name": "UID-Bereich",
+          "description": "IMAP-UID-Menge, z. B. 100:200."
+        },
+        "sort": {
+          "name": "Sortierung",
+          "description": "Reihenfolge der Ergebnisse."
+        },
+        "limit": {
+          "name": "Anzahl",
+          "description": "Nachrichten je Seite (1–50)."
+        },
+        "cursor": {
+          "name": "Cursor",
+          "description": "next_cursor der vorherigen Seite."
+        },
+        "include_snippet": {
+          "name": "Vorschau mitliefern",
+          "description": "Kurze Textvorschau (bis 160 Zeichen) je Nachricht."
+        }
+      }
+    },
+    "get_message": {
+      "name": "Nachricht abrufen",
+      "description": "Liefert Kopfzeilen, den bereinigten Text und die Anhangsliste einer Nachricht. Markiert sie nicht als gelesen.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Der GMX-Mail-Konfigurationseintrag."
+        },
+        "ref": {
+          "name": "Mail-Referenz",
+          "description": "Objekt {folder, uid, uidvalidity} aus dem Suchergebnis."
+        },
+        "format": {
+          "name": "Format",
+          "description": "Welcher Teil als Text geliefert wird."
+        },
+        "max_chars": {
+          "name": "Höchstzahl Zeichen",
+          "description": "Höchstzahl Textzeichen in dieser Antwort."
+        },
+        "offset": {
+          "name": "Startposition",
+          "description": "Zeichenposition zum Fortsetzen (next_offset)."
+        },
+        "headers": {
+          "name": "Weitere Kopfzeilen",
+          "description": "Namen weiterer Kopfzeilen, die geliefert werden sollen."
+        }
+      }
+    },
+    "get_attachment": {
+      "name": "Anhang abrufen",
+      "description": "Speichert einen Anhang unter /media/gmx_mail oder liefert kleine Anhänge als base64.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Der GMX-Mail-Konfigurationseintrag."
+        },
+        "ref": {
+          "name": "Mail-Referenz",
+          "description": "Objekt {folder, uid, uidvalidity} aus dem Suchergebnis."
+        },
+        "part_id": {
+          "name": "Teil-ID",
+          "description": "part_id aus der Anhangsliste von get_message."
+        },
+        "mode": {
+          "name": "Modus",
+          "description": "Als Datei speichern oder als base64 liefern (nur bis 256 KB)."
+        },
+        "max_bytes": {
+          "name": "Höchstgröße",
+          "description": "Größere Anhänge ablehnen."
+        }
+      }
+    },
+    "get_status": {
+      "name": "Status abrufen",
+      "description": "Liefert Fähigkeiten des Servers, die Zuordnung der Spezialordner, die Zahl ungelesener Nachrichten im Posteingang und die aktiven Einstellungen.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Der GMX-Mail-Konfigurationseintrag."
+        }
+      }
     }
   }
 }

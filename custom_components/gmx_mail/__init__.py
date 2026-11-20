@@ -37,6 +37,7 @@ from .const import (
     Security,
 )
 from .options import folder_overrides, with_defaults
+from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -106,7 +107,8 @@ def async_create_auth_issue(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the integration (actions are registered here from M2 on)."""
+    """Set up the integration and register its actions."""
+    async_setup_services(hass)
     return True
 
 

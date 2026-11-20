@@ -175,6 +175,25 @@
         "auto": "Append only if missing",
         "none": "No copy"
       }
+    },
+    "sort": {
+      "options": {
+        "date_desc": "Newest first",
+        "date_asc": "Oldest first"
+      }
+    },
+    "body_format": {
+      "options": {
+        "text": "Plain text (preferred)",
+        "html_as_text": "HTML converted to text",
+        "raw_headers": "All headers"
+      }
+    },
+    "attachment_mode": {
+      "options": {
+        "save": "Save as file",
+        "base64": "Return as base64"
+      }
     }
   },
   "exceptions": {
@@ -186,12 +205,221 @@
     },
     "tls_error": {
       "message": "The encrypted connection to the GMX mail server failed."
+    },
+    "permission_disabled": {
+      "message": "The permission level '{permission}' is not enabled in the options of this account."
+    },
+    "auth_failed": {
+      "message": "GMX rejected the login. Reauthenticate the integration; POP3/IMAP access may have been switched off."
+    },
+    "folder_not_found": {
+      "message": "The folder '{folder}' does not exist or cannot be opened."
+    },
+    "uidvalidity_changed": {
+      "message": "The folder was rebuilt on the server (UIDVALIDITY changed). Search again to get valid references."
+    },
+    "message_not_found": {
+      "message": "The message no longer exists in this folder."
+    },
+    "attachment_not_found": {
+      "message": "The message has no part with this ID."
+    },
+    "attachment_too_large": {
+      "message": "The attachment is larger than allowed (max_bytes; base64 at most 256 KB)."
+    },
+    "search_rejected": {
+      "message": "The server rejected the search criteria."
+    },
+    "imap_error": {
+      "message": "The IMAP server returned an error."
+    },
+    "invalid_cursor": {
+      "message": "The cursor is invalid or belongs to a different search."
+    },
+    "path_not_allowed": {
+      "message": "The media folder is not an allowed path in Home Assistant (allowlist_external_dirs)."
     }
   },
   "issues": {
     "imap_possibly_disabled": {
       "title": "GMX login rejected for {account}",
       "description": "GMX rejected the login. GMX switches POP3/IMAP access off automatically after a longer period without use, and then reports the same error as for a wrong password.\n\n1. Log in to the GMX web mailer.\n2. Open E-Mail settings > POP3/IMAP and allow POP3 and IMAP access (GMX asks for a security confirmation).\n3. If the app password was deleted, create a new one under Account > Login & security > App passwords.\n4. Then reauthenticate the integration under Settings > Devices & services."
+    }
+  },
+  "services": {
+    "list_folders": {
+      "name": "List folders",
+      "description": "Lists all folders with their special role (inbox, sent, drafts, trash, spam).",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The GMX Mail config entry."
+        },
+        "include_counts": {
+          "name": "Include counts",
+          "description": "Also return the number of messages and unseen messages per folder (one STATUS command per folder)."
+        }
+      }
+    },
+    "search": {
+      "name": "Search messages",
+      "description": "Searches a folder and returns message summaries page by page. New messages appear in GMX's full-text index only after about 30 seconds; recent messages are then checked by their headers.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The GMX Mail config entry."
+        },
+        "folder": {
+          "name": "Folder",
+          "description": "Folder path, e.g. INBOX or Gesendet."
+        },
+        "from": {
+          "name": "From",
+          "description": "Text contained in the sender."
+        },
+        "to": {
+          "name": "To",
+          "description": "Text contained in the recipients."
+        },
+        "cc": {
+          "name": "CC",
+          "description": "Text contained in the CC recipients."
+        },
+        "subject": {
+          "name": "Subject",
+          "description": "Text contained in the subject."
+        },
+        "text": {
+          "name": "Text",
+          "description": "Text contained in headers or body."
+        },
+        "body": {
+          "name": "Body",
+          "description": "Text contained in the body."
+        },
+        "since": {
+          "name": "Since",
+          "description": "Received on or after this date."
+        },
+        "before": {
+          "name": "Before",
+          "description": "Received before this date."
+        },
+        "seen": {
+          "name": "Seen",
+          "description": "Only read (true) or unread (false) messages."
+        },
+        "flagged": {
+          "name": "Flagged",
+          "description": "Only flagged (true) or unflagged (false) messages."
+        },
+        "answered": {
+          "name": "Answered",
+          "description": "Only answered (true) or unanswered (false) messages."
+        },
+        "draft": {
+          "name": "Draft",
+          "description": "Only drafts (true) or non-drafts (false)."
+        },
+        "larger": {
+          "name": "Larger than",
+          "description": "Minimum size in bytes."
+        },
+        "smaller": {
+          "name": "Smaller than",
+          "description": "Maximum size in bytes."
+        },
+        "keyword": {
+          "name": "Keyword",
+          "description": "Messages with this IMAP keyword."
+        },
+        "uid_range": {
+          "name": "UID range",
+          "description": "IMAP UID set, e.g. 100:200."
+        },
+        "sort": {
+          "name": "Sort order",
+          "description": "Order of the results."
+        },
+        "limit": {
+          "name": "Limit",
+          "description": "Messages per page (1-50)."
+        },
+        "cursor": {
+          "name": "Cursor",
+          "description": "next_cursor of the previous page."
+        },
+        "include_snippet": {
+          "name": "Include snippet",
+          "description": "Add a short text preview (up to 160 characters) per message."
+        }
+      }
+    },
+    "get_message": {
+      "name": "Get message",
+      "description": "Returns headers, the sanitised text and the attachment list of a message. Does not mark it as read.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The GMX Mail config entry."
+        },
+        "ref": {
+          "name": "Message reference",
+          "description": "Object {folder, uid, uidvalidity} as returned by search."
+        },
+        "format": {
+          "name": "Format",
+          "description": "Which part to return as text."
+        },
+        "max_chars": {
+          "name": "Maximum characters",
+          "description": "Maximum number of text characters in this response."
+        },
+        "offset": {
+          "name": "Offset",
+          "description": "Character position to continue from (next_offset)."
+        },
+        "headers": {
+          "name": "Additional headers",
+          "description": "Names of further headers to return."
+        }
+      }
+    },
+    "get_attachment": {
+      "name": "Get attachment",
+      "description": "Saves an attachment under /media/gmx_mail or returns small attachments as base64.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The GMX Mail config entry."
+        },
+        "ref": {
+          "name": "Message reference",
+          "description": "Object {folder, uid, uidvalidity} as returned by search."
+        },
+        "part_id": {
+          "name": "Part ID",
+          "description": "part_id from the attachment list of get_message."
+        },
+        "mode": {
+          "name": "Mode",
+          "description": "Save as a file or return base64 (only up to 256 KB)."
+        },
+        "max_bytes": {
+          "name": "Maximum size",
+          "description": "Refuse larger attachments."
+        }
+      }
+    },
+    "get_status": {
+      "name": "Get status",
+      "description": "Returns capabilities, the special-folder mapping, the number of unseen messages in the inbox and the active settings.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The GMX Mail config entry."
+        }
+      }
     }
   }
 }

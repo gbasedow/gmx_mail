@@ -207,13 +207,13 @@
       "message": "Die verschlüsselte Verbindung zum GMX-Mailserver ist fehlgeschlagen."
     },
     "permission_disabled": {
-      "message": "Die Rechtestufe „{permission}“ ist in den Optionen dieses Kontos nicht freigegeben."
+      "message": "Die Rechtestufe {permission} ist in den Optionen dieses Kontos nicht freigegeben."
     },
     "auth_failed": {
       "message": "GMX hat die Anmeldung abgelehnt. Die Integration neu anmelden; eventuell wurde der POP3/IMAP-Zugriff abgeschaltet."
     },
     "folder_not_found": {
-      "message": "Der Ordner „{folder}“ existiert nicht oder kann nicht geöffnet werden."
+      "message": "Der Ordner {folder} existiert nicht oder kann nicht geöffnet werden."
     },
     "uidvalidity_changed": {
       "message": "Der Ordner wurde auf dem Server neu aufgebaut (UIDVALIDITY geändert). Bitte erneut suchen, um gültige Referenzen zu erhalten."
@@ -365,7 +365,7 @@
         },
         "ref": {
           "name": "Mail-Referenz",
-          "description": "Objekt {folder, uid, uidvalidity} aus dem Suchergebnis."
+          "description": "Objekt mit folder, uid und uidvalidity aus dem Suchergebnis."
         },
         "format": {
           "name": "Format",
@@ -395,7 +395,7 @@
         },
         "ref": {
           "name": "Mail-Referenz",
-          "description": "Objekt {folder, uid, uidvalidity} aus dem Suchergebnis."
+          "description": "Objekt mit folder, uid und uidvalidity aus dem Suchergebnis."
         },
         "part_id": {
           "name": "Teil-ID",

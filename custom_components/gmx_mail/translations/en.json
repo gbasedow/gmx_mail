@@ -207,13 +207,13 @@
       "message": "The encrypted connection to the GMX mail server failed."
     },
     "permission_disabled": {
-      "message": "The permission level '{permission}' is not enabled in the options of this account."
+      "message": "The permission level {permission} is not enabled in the options of this account."
     },
     "auth_failed": {
       "message": "GMX rejected the login. Reauthenticate the integration; POP3/IMAP access may have been switched off."
     },
     "folder_not_found": {
-      "message": "The folder '{folder}' does not exist or cannot be opened."
+      "message": "The folder {folder} does not exist or cannot be opened."
     },
     "uidvalidity_changed": {
       "message": "The folder was rebuilt on the server (UIDVALIDITY changed). Search again to get valid references."
@@ -365,7 +365,7 @@
         },
         "ref": {
           "name": "Message reference",
-          "description": "Object {folder, uid, uidvalidity} as returned by search."
+          "description": "Object with folder, uid and uidvalidity as returned by search."
         },
         "format": {
           "name": "Format",
@@ -395,7 +395,7 @@
         },
         "ref": {
           "name": "Message reference",
-          "description": "Object {folder, uid, uidvalidity} as returned by search."
+          "description": "Object with folder, uid and uidvalidity as returned by search."
         },
         "part_id": {
           "name": "Part ID",

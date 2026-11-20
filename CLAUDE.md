@@ -19,20 +19,23 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
 
 ## 2. Status
 
-- Stand: 20.11.2026. **Noch keine Integration.** M0 (Live-Probe v2 gegen GMX) ist gelaufen; Ergebnisse stehen in `GMX-NOTES.md`
-  (Spalte „Ergebnis“, Abschnitt 4) und `docs/probe-2026-11-20.json`. Kernfunktionen bestätigt (UIDPLUS, MOVE, Keywords, UTF-7-Ordner, 4 parallele Verbindungen).
-- **Geklärt in Lauf 2:** Textsuche = Indexverzögerung ≈ 30 s bei neuen Mails (Bestand schnell); IDLE/ruhende Verbindung wird nach ≈ 30 min getrennt
-  (`* BYE timeout`); `COPYUID` kommt bei MOVE ungetaggt (`* OK [COPYUID …]`; nur ein belastbarer Messpunkt, siehe GMX-NOTES Zeile 28).
-- Probe-Skript v3d (20.11.2026): `CLOSE` auf echten Ordnern durch `UNSELECT` ersetzt (sonst implizites EXPUNGE fremder `\Deleted`-Mails);
-  Offline-Tests gegen Fake-IMAP-Server in `tests/`. Eingecheckt ist nur `docs/probe-2026-11-20-v4.json`.
-- SPEC.md ist um die M0-Ergebnisse ergänzt (Reconnect/NOOP, Suchfallback, COPYUID, APPENDLIMIT, Testcontainer). Vom Nutzer freigegeben.
-- **Nächster Schritt: M1** (freigegeben, noch nicht begonnen): Gerüst, manifest, Config-/Options-/Reauth-/Reconfigure-Flow,
-  ImapWorker (imapclient im Executor, `asyncio.Lock`, max. 2 Verbindungen, Reconnect/Backoff, NOOP, IDLE-Erneuerung eingeplant), Tests mit Mocks.
-  Umgebung: Linux mit Python 3.14 (`pytest-homeassistant-custom-component` passend zu HA 2026.11). Unter Windows/Python 3.15 nicht
-  installierbar (numpy ohne Wheel) – deshalb M1 in einer Linux-/Web-Session.
-- **Geklärt in Lauf 3:** SMTP legt **keine** Kopie in `Gesendet` an → Standard `sent_copy_mode=append`; `MOVE` nach `Gelöscht` funktioniert.
-- **Noch offen:** IMAP-Abschaltfrist (Langzeitbeobachtung). Weitere Live-Läufe sind für M1 nicht nötig.
-- M1 (Gerüst, Config-Flow, Verbindung, Reconnect) kann starten. `search` (M2) mit Indexverzögerungs-Fallback entwerfen.
+- Stand: 20.11.2026. **M1 umgesetzt (Branch `claude/wizardly-gauss-af5crm`), Freigabe durch den Nutzer offen.**
+  M0 (Live-Probe) ist abgeschlossen; Ergebnisse in `GMX-NOTES.md` (Spalte „Ergebnis“, Abschnitt 4) und `docs/probe-2026-11-20-v4.json`.
+  Kern: keine Gesendet-Kopie per SMTP (→ `sent_copy_mode=append`), Suchindex ≈ 30 s verzögert, ruhende Verbindungen/IDLE nach ≈ 30 min
+  getrennt (`* BYE timeout`), `COPYUID` bei MOVE ungetaggt (nur 1 Messpunkt), Probe v3d nutzt `UNSELECT` statt `CLOSE`.
+- **M1-Umfang:** Gerüst (`manifest.json`, `const.py`, `strings.json`, `translations/{de,en}.json`), Config-Flow (IMAP-Login, CAPABILITY, LIST,
+  SMTP-Login), Reauth-, Reconfigure- und Options-Flow (alle Optionen aus SPEC §2, mit Validierung), `client/imap.py` (ImapWorker: imapclient im
+  Executor, `asyncio.Lock`, Lazy-Connect, NOOP nach > 5 min, Schließen nach 10 min, ein Reconnect mit Wiederholung nur für Lesen,
+  `GmxOutcomeUnknownError` für Schreiben, Backoff 5 s–15 min mit Jitter, Auth-Fehler stoppt Reconnects und startet Reauth,
+  `ConnectionLimiter` max. 2), `client/folders.py` (SPECIAL-USE → Heuristik → Override, Mehrdeutigkeit), `client/smtp.py` (nur Login-Check),
+  Repair-Issue `imap_possibly_disabled`. Noch **keine** Aktionen, Entitäten, IDLE-Watcher, Diagnose (M2/M3).
+- Prüfungen: 107 Integrationstests + 29 Probe-Tests grün, Coverage 99 %, ruff, mypy (strict), hassfest (GitHub Action) grün.
+  **HACS-Validierung ungeprüft:** Die HACS-Action prüft nur öffentliche Repositories; der Job wird übersprungen, solange das Repo privat ist
+  (vom Nutzer so entschieden, DECISIONS Nr. 17). Vor einer Veröffentlichung über HACS das Repo öffentlich schalten und die Action prüfen. `pytest-homeassistant-custom-component` 0.13.375 bringt HA **2026.10.4** mit – für 2026.11 gibt es noch keine Version.
+- Entscheidungen aus M1: `docs/DECISIONS.md` Nr. 11–16. Nr. 12 entschieden (Limits frei wählbar, SPEC-Werte als Voreinstellung);
+  Nr. 11, 13–16 Freigabe offen. Offen für M6: Stundenlimit für Empfänger (Drittquelle: 11 Empfänger/Stunde, unbestätigt).
+- **Nächster Schritt nach Freigabe: M2** (Leseaktionen). Vorher die Repos aus Abschnitt 10 sichten. `search` mit Indexverzögerungs-Fallback.
+- **Noch offen:** IMAP-Abschaltfrist (Langzeitbeobachtung).
 - Alle Annahmen, die in `GMX-NOTES.md` als `U` (unbestätigt) oder `LIVE` markiert sind, nicht als Fakt behandeln.
   Capability-abhängig implementieren (z. B. MOVE sonst COPY + `\Deleted` + UID EXPUNGE).
 
@@ -109,15 +112,17 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
 - Mail-Referenz `{folder, uid, uidvalidity}`; bei geänderter `uidvalidity` ablehnen.
 - Lesen nur mit `BODY.PEEK` (setzt `\Seen` nicht).
 
-## 8. Befehle (nach M1 anpassen)
+## 8. Befehle
 
 ```
-pip install -r requirements_dev.txt   # wird in M1 angelegt (bis dahin: requirements_test.txt)
-pytest -q                             # unter Windows: py -m pytest -q
-pytest -m integration                 # docker compose up greenmail dovecot
+pip install -r requirements_dev.txt   # Linux, Python 3.14 (HA verlangt >= 3.14.2)
+pytest -q                             # Integrationstests (tests/gmx_mail, mit HA-Plugin; blockiert Sockets)
+pytest -q -p no:homeassistant tests/probe   # Tests des Probe-Skripts (Fake-IMAP-Server über Sockets)
+pytest -m integration                 # ab M2: docker compose up greenmail dovecot
 ruff check . && ruff format --check .
 mypy custom_components/gmx_mail
-# hassfest + HACS-Validierung laufen als GitHub Actions
+# hassfest + HACS-Validierung laufen als GitHub Actions (.github/workflows/validate.yml)
+# HACS-Action prüft nur öffentliche Repos: solange gmx_mail privat ist, wird der Job übersprungen (HACS ungeprüft)
 GMX_USER=... GMX_PASS=... python3 tools/gmx_probe.py   # nur manuell, Test-Konto
 ```
 

@@ -1,0 +1,50 @@
+"""Errors raised by the GMX mail clients.
+
+Messages never contain credentials, addresses or mail content.
+"""
+
+from __future__ import annotations
+
+
+class GmxMailError(Exception):
+    """Base class for all client errors."""
+
+
+class GmxAuthError(GmxMailError):
+    """Login rejected.
+
+    At GMX this means *wrong password or IMAP/POP3 access disabled* - the two cannot be told apart
+    (GMX-NOTES row 6).
+    """
+
+
+class GmxSmtpAuthError(GmxMailError):
+    """SMTP login rejected."""
+
+
+class GmxTlsError(GmxMailError):
+    """TLS handshake or certificate verification failed."""
+
+
+class GmxConnectionError(GmxMailError):
+    """Server not reachable, connection lost or timed out."""
+
+
+class GmxBackoffError(GmxConnectionError):
+    """A reconnect is not allowed yet because of the backoff after a failed attempt."""
+
+    def __init__(self, retry_in: float) -> None:
+        """Store the remaining backoff time."""
+        super().__init__(f"reconnect backoff active, retry in {retry_in:.0f} s")
+        self.retry_in = retry_in
+
+
+class GmxConnectionLimitError(GmxMailError):
+    """The per-account IMAP connection budget is exhausted."""
+
+
+class GmxOutcomeUnknownError(GmxMailError):
+    """The connection broke during a writing command; it is unknown whether the server executed it.
+
+    Writing commands are never repeated automatically (SPEC section 5, measure 6).
+    """

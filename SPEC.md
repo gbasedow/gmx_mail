@@ -151,7 +151,8 @@ als „search + move/flag“ auf neue Mails anwendet. Repair-Issue `server_rules
    - Option `allow_reply_to_sender` (Voreinstellung aus): erlaubt Antworten an den Absender der Original-Mail ohne Allowlist-Eintrag.
 3. **Löschen** standardmäßig nur in den Papierkorb. Endgültig nur mit Option `allow_permanent_delete` und Token. Nie mailbox-weites EXPUNGE, nur UID EXPUNGE mit UIDPLUS*.
 4. **Zwei-Schritt mit Token und Dry-Run** für Senden und endgültiges Löschen (Abschnitt 3).
-5. **Mengenlimits** je Aufruf (Refs <= 100, Löschen <= 50, Empfänger <= 10) und je Tag (Senden 20, Löschen 200), gespeichert per `Store`.
+5. **Mengenlimits** je Aufruf (Refs <= 100, Löschen <= 50) sowie Empfänger je Mail (Voreinstellung 10) und je Tag (Senden 20, Löschen 200), gespeichert per `Store`.
+   Empfänger-, Versand- und Löschlimit sind im Options-Flow frei wählbar (mindestens 1, ohne Obergrenze); die genannten Werte sind Voreinstellungen (DECISIONS Nr. 12).
 6. **Keine automatische Wiederholung** mehrdeutiger Schreibvorgänge nach Timeout*; Rückmeldung `outcome: unknown`.
 7. **Inhalts-Sanitizing:**
    - HTML zu Text; entfernen: script, style, Kommentare und Elemente mit `display:none`, `visibility:hidden`, `font-size:0` oder weißer Schrift auf weißem Grund.
@@ -177,7 +178,7 @@ Die Allowlist ist die einzige harte technische Grenze gegen Datenabfluss; Token 
    Dovecot GMX-ähnlich konfigurieren: Capabilities wie in M0 gemessen (`docs/probe-2026-11-20-v4.json`, inkl. `APPENDLIMIT=29360128`,
    MOVE, UIDPLUS, SPECIAL-USE, LIST-STATUS, SORT), ohne CONDSTORE/QRESYNC, QUOTA, ESEARCH, UTF8=ACCEPT; Ordner `Gesendet`, `Entwürfe`,
    `Gelöscht`, `Spamverdacht` mit SPECIAL-USE; kurzes Idle-Timeout (z. B. 60 s), um Reconnect und IDLE-Erneuerung zu testen.
-   Für Offline-Tests ohne Docker dient der Fake-IMAP-Server aus `tests/fake_imap.py` als Vorbild.
+   Für Offline-Tests ohne Docker dient der Fake-IMAP-Server aus `tests/probe/fake_imap.py` als Vorbild.
 3. **Lint/Validierung:** ruff, mypy (strict für `client/` und `guard.py`), `hassfest` (GitHub Action `home-assistant/actions/hassfest`),
    HACS-Validierung (`hacs/action`, `category: integration`), `hacs.json` mit `homeassistant: "2026.11.0"`.
 4. **Quality Scale:** `quality_scale.yaml` pflegen. Ziel: alle Bronze-Regeln und von Silber/Gold u. a. `action-setup`, `action-exceptions`,

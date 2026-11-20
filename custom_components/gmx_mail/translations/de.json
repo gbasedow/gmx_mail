@@ -1,0 +1,197 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "GMX-Postfach verbinden",
+        "description": "Bitte ein App-Passwort verwenden. Der POP3/IMAP-Zugriff muss im GMX-Webmailer freigeschaltet sein (E-Mail-Einstellungen > POP3/IMAP).",
+        "data": {
+          "email": "E-Mail-Adresse",
+          "password": "App-Passwort"
+        },
+        "data_description": {
+          "email": "Die vollständige GMX-Adresse; sie ist zugleich der Benutzername.",
+          "password": "Anlegen unter Account > Login & Sicherheit > App-Passwörter. Bei Zwei-Faktor-Authentifizierung Pflicht."
+        },
+        "sections": {
+          "server": {
+            "name": "Servereinstellungen",
+            "description": "Nur ändern, wenn GMX seine Server ändert.",
+            "data": {
+              "imap_host": "IMAP-Server",
+              "imap_port": "IMAP-Port",
+              "imap_security": "IMAP-Verschlüsselung",
+              "smtp_host": "SMTP-Server",
+              "smtp_port": "SMTP-Port",
+              "smtp_security": "SMTP-Verschlüsselung"
+            }
+          }
+        }
+      },
+      "reauth_confirm": {
+        "title": "GMX-Postfach neu anmelden",
+        "description": "GMX hat die Anmeldung für {account} abgelehnt. Entweder ist das App-Passwort nicht mehr gültig, oder GMX hat den POP3/IMAP-Zugriff nach längerer Nichtnutzung abgeschaltet. Gegebenenfalls POP3/IMAP im Webmailer wieder einschalten und dann das App-Passwort eingeben.",
+        "data": {
+          "password": "App-Passwort"
+        }
+      },
+      "reconfigure": {
+        "title": "Servereinstellungen ändern",
+        "description": "Servereinstellungen für {account}. Die Verbindung wird mit den gespeicherten Zugangsdaten geprüft.",
+        "data": {
+          "imap_host": "IMAP-Server",
+          "imap_port": "IMAP-Port",
+          "imap_security": "IMAP-Verschlüsselung",
+          "smtp_host": "SMTP-Server",
+          "smtp_port": "SMTP-Port",
+          "smtp_security": "SMTP-Verschlüsselung"
+        }
+      }
+    },
+    "error": {
+      "invalid_email": "Bitte eine vollständige E-Mail-Adresse eingeben.",
+      "invalid_auth_or_imap_disabled": "Anmeldung abgelehnt. App-Passwort prüfen und sicherstellen, dass der POP3/IMAP-Zugriff im GMX-Webmailer eingeschaltet ist (GMX schaltet ihn nach längerer Nichtnutzung automatisch ab).",
+      "smtp_auth_failed": "IMAP funktioniert, aber die SMTP-Anmeldung wurde abgelehnt.",
+      "cannot_connect": "Der Mailserver ist nicht erreichbar.",
+      "tls_error": "Die verschlüsselte Verbindung ist fehlgeschlagen (TLS- oder Zertifikatsfehler).",
+      "unknown": "Unerwarteter Fehler, siehe Protokoll."
+    },
+    "abort": {
+      "already_configured": "Dieses Postfach ist bereits eingerichtet.",
+      "reauth_successful": "Die erneute Anmeldung war erfolgreich.",
+      "reconfigure_successful": "Die Servereinstellungen wurden aktualisiert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Optionen des GMX-Postfachs",
+        "description": "Die Rechte begrenzen, was Aktionen (z. B. durch einen KI-Assistenten aufgerufen) dürfen. Die Allowlist ist die einzige harte Grenze gegen das Versenden von Daten an Dritte.",
+        "sections": {
+          "permissions_section": {
+            "name": "Rechte",
+            "data": {
+              "permissions": "Erlaubte Aktionsstufen",
+              "allow_permanent_delete": "Endgültiges Löschen erlauben"
+            },
+            "data_description": {
+              "permissions": "Lesen ist immer erforderlich. Organisieren = Markierungen, Verschieben, Ordner, Entwürfe. Löschen = in den Papierkorb. Senden = Senden, Antworten, Weiterleiten.",
+              "allow_permanent_delete": "Benötigt zusätzlich die Stufe Löschen und für jeden Aufruf ein Bestätigungs-Token."
+            }
+          },
+          "sending_section": {
+            "name": "Versand",
+            "data": {
+              "send_mode": "Versand-Modus",
+              "allowlist": "Erlaubte Empfänger",
+              "allow_reply_to_sender": "Antworten an den ursprünglichen Absender erlauben",
+              "sent_copy_mode": "Kopie im Ordner Gesendet"
+            },
+            "data_description": {
+              "send_mode": "Aus: kein Versand. Allowlist: nur eingetragene Empfänger. Beliebige Empfänger: erfordert den Eintrag * in der Liste.",
+              "allowlist": "Exakte Adressen oder *@domain. Eine leere Liste sperrt den Versand. * nur zusammen mit dem Modus „Beliebige Empfänger“ eintragen.",
+              "allow_reply_to_sender": "Antworten an den Absender einer Nachricht auch dann, wenn er nicht auf der Allowlist steht.",
+              "sent_copy_mode": "GMX legt bei Versand über SMTP keine Kopie an, deshalb legt die Integration sie selbst ab."
+            }
+          },
+          "limits_section": {
+            "name": "Grenzen",
+            "description": "Frei wählbar (mindestens 1). GMX veröffentlicht seine Versandlimits nicht; hohe Werte können zu einer vorübergehenden Kontosperre führen.",
+            "data": {
+              "max_recipients": "Höchstzahl Empfänger je Nachricht",
+              "max_send_per_day": "Höchstzahl gesendeter Nachrichten pro Tag",
+              "max_delete_per_day": "Höchstzahl Löschungen pro Tag"
+            }
+          },
+          "connection_section": {
+            "name": "Verbindung",
+            "data": {
+              "poll_interval": "Abfrageintervall",
+              "idle_enabled": "IMAP IDLE (Push) verwenden",
+              "idle_renew_minutes": "IDLE erneuern nach"
+            },
+            "data_description": {
+              "idle_renew_minutes": "GMX trennt ruhende Verbindungen nach etwa 30 Minuten; höchstens 25 Minuten."
+            }
+          },
+          "folders_section": {
+            "name": "Spezialordner",
+            "description": "Leer lassen für automatische Erkennung (SPECIAL-USE, dann Ordnername).",
+            "data": {
+              "folder_sent": "Gesendet",
+              "folder_drafts": "Entwürfe",
+              "folder_trash": "Papierkorb",
+              "folder_junk": "Spam"
+            }
+          },
+          "privacy_section": {
+            "name": "Datenschutz und Audit",
+            "data": {
+              "event_include_headers": "Absender und Betreff in Ereignisse aufnehmen",
+              "audit_retention_days": "Audit-Protokoll aufbewahren für"
+            },
+            "data_description": {
+              "event_include_headers": "Ereignisdaten landen in Logbuch und Recorder und können einen KI-Assistenten erreichen."
+            }
+          }
+        }
+      }
+    },
+    "error": {
+      "invalid_permission": "Unbekannte Rechtestufe.",
+      "read_required": "Die Stufe Lesen ist erforderlich.",
+      "invalid_send_mode": "Unbekannter Versand-Modus.",
+      "invalid_allowlist_entry": "Ungültiger Allowlist-Eintrag. Erlaubt sind exakte Adressen, *@domain oder *.",
+      "wildcard_requires_any": "Der Eintrag * ist nur mit dem Versand-Modus „Beliebige Empfänger“ erlaubt.",
+      "any_requires_wildcard": "Der Versand-Modus „Beliebige Empfänger“ muss durch den Eintrag * in der Allowlist bestätigt werden.",
+      "invalid_sent_copy_mode": "Unbekannter Modus für die Gesendet-Kopie.",
+      "out_of_range": "Ein Wert liegt außerhalb des erlaubten Bereichs."
+    }
+  },
+  "selector": {
+    "security": {
+      "options": {
+        "ssl": "SSL/TLS (implizit)",
+        "starttls": "STARTTLS"
+      }
+    },
+    "permissions": {
+      "options": {
+        "read": "Lesen",
+        "organize": "Organisieren",
+        "delete": "Löschen (Papierkorb)",
+        "send": "Senden"
+      }
+    },
+    "send_mode": {
+      "options": {
+        "off": "Aus",
+        "allowlist": "Nur Allowlist",
+        "any": "Beliebige Empfänger"
+      }
+    },
+    "sent_copy_mode": {
+      "options": {
+        "append": "Immer eine Kopie ablegen",
+        "auto": "Nur ablegen, wenn sie fehlt",
+        "none": "Keine Kopie"
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_auth_or_imap_disabled": {
+      "message": "GMX hat die Anmeldung abgelehnt. Das App-Passwort ist ungültig oder der POP3/IMAP-Zugriff wurde abgeschaltet."
+    },
+    "cannot_connect": {
+      "message": "Keine Verbindung zum GMX-Mailserver."
+    },
+    "tls_error": {
+      "message": "Die verschlüsselte Verbindung zum GMX-Mailserver ist fehlgeschlagen."
+    }
+  },
+  "issues": {
+    "imap_possibly_disabled": {
+      "title": "GMX-Anmeldung für {account} abgelehnt",
+      "description": "GMX hat die Anmeldung abgelehnt. GMX schaltet den POP3/IMAP-Zugriff nach längerer Nichtnutzung automatisch ab und meldet dann denselben Fehler wie bei einem falschen Passwort.\n\n1. Im GMX-Webmailer anmelden.\n2. E-Mail-Einstellungen > POP3/IMAP öffnen und den POP3- und IMAP-Zugriff erlauben (GMX verlangt dabei eine Sicherheitsabfrage).\n3. Falls das App-Passwort gelöscht wurde, unter Account > Login & Sicherheit > App-Passwörter ein neues anlegen.\n4. Danach die Integration unter Einstellungen > Geräte & Dienste neu anmelden."
+    }
+  }
+}

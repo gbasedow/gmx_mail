@@ -29,8 +29,9 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
   `GmxOutcomeUnknownError` für Schreiben, Backoff 5 s–15 min mit Jitter, Auth-Fehler stoppt Reconnects und startet Reauth,
   `ConnectionLimiter` max. 2), `client/folders.py` (SPECIAL-USE → Heuristik → Override, Mehrdeutigkeit), `client/smtp.py` (nur Login-Check),
   Repair-Issue `imap_possibly_disabled`. Noch **keine** Aktionen, Entitäten, IDLE-Watcher, Diagnose (M2/M3).
-- Prüfungen: 107 Integrationstests + 29 Probe-Tests grün, Coverage 99 %, ruff, mypy (strict) grün. hassfest/HACS laufen nur als GitHub Action
-  (lokal nicht ausgeführt). `pytest-homeassistant-custom-component` 0.13.375 bringt HA **2026.10.4** mit – für 2026.11 gibt es noch keine Version.
+- Prüfungen: 107 Integrationstests + 29 Probe-Tests grün, Coverage 99 %, ruff, mypy (strict), hassfest (GitHub Action) grün.
+  **HACS-Validierung ungeprüft:** Die HACS-Action prüft nur öffentliche Repositories; der Job wird übersprungen, solange das Repo privat ist
+  (vom Nutzer so entschieden, DECISIONS Nr. 17). Vor einer Veröffentlichung über HACS das Repo öffentlich schalten und die Action prüfen. `pytest-homeassistant-custom-component` 0.13.375 bringt HA **2026.10.4** mit – für 2026.11 gibt es noch keine Version.
 - Entscheidungen aus M1: `docs/DECISIONS.md` Nr. 11–16. Nr. 12 entschieden (Limits frei wählbar, SPEC-Werte als Voreinstellung);
   Nr. 11, 13–16 Freigabe offen. Offen für M6: Stundenlimit für Empfänger (Drittquelle: 11 Empfänger/Stunde, unbestätigt).
 - **Nächster Schritt nach Freigabe: M2** (Leseaktionen). Vorher die Repos aus Abschnitt 10 sichten. `search` mit Indexverzögerungs-Fallback.
@@ -121,6 +122,7 @@ pytest -m integration                 # ab M2: docker compose up greenmail dovec
 ruff check . && ruff format --check .
 mypy custom_components/gmx_mail
 # hassfest + HACS-Validierung laufen als GitHub Actions (.github/workflows/validate.yml)
+# HACS-Action prüft nur öffentliche Repos: solange gmx_mail privat ist, wird der Job übersprungen (HACS ungeprüft)
 GMX_USER=... GMX_PASS=... python3 tools/gmx_probe.py   # nur manuell, Test-Konto
 ```
 

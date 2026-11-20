@@ -19,6 +19,7 @@
 | 14 | 2026-11-20 | `send_mode=any` nur mit Allowlist-Eintrag `*`; `*` umgekehrt nur im Modus `any`. | Umsetzung von SPEC §5 Nr. 2 („nur durch ausdrückliches Setzen von `*`“). **Vorschlag M1, Freigabe offen.** |
 | 15 | 2026-11-20 | Setup meldet sich einmal an (Capabilities, Ordner), die Arbeitsverbindung bleibt danach bis 10 min Leerlauf offen und wird bei Bedarf neu aufgebaut. Auth-Fehler → Reauth + Repair; Netz-/TLS-Fehler → `ConfigEntryNotReady`. | Früher Fehlerhinweis statt erst bei der ersten Aktion. **Vorschlag M1, Freigabe offen.** |
 | 16 | 2026-11-20 | Testsuite in zwei Läufe geteilt: `tests/gmx_mail` (HA-Plugin) und `tests/probe` (`-p no:homeassistant`). | Das HA-Testplugin blockiert Sockets und prüft auf übrig gebliebene Threads; der Fake-IMAP-Server der Probe-Tests braucht beides. |
+| 17 | 2026-11-20 | HACS-Validierung (GitHub Action) läuft nur bei öffentlichem Repository, sonst wird der Job übersprungen. | Die HACS-Action lehnt private Repositories grundsätzlich ab („can only validate public repositories“). Entscheidung des Nutzers; HACS bleibt bis zur Veröffentlichung ungeprüft. |
 
 - `sent_copy_mode` Standard `append`: GMX legt per SMTP keine Gesendet-Kopie an (M0, Lauf 3).
 

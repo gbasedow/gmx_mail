@@ -19,7 +19,8 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
 
 ## 2. Status
 
-- Stand: 20.11.2026. **M1 in `main` (PR #2). M2 (Leseaktionen) umgesetzt auf Branch `claude/wizardly-gauss-af5crm`, Freigabe offen.**
+- Stand: 20.11.2026. **M1 und M2 (Leseaktionen) abgeschlossen und vom Nutzer freigegeben. Nächster Schritt: M3** (Coordinator, IDLE,
+  Sensoren, Ereignisse, Diagnose, Repairs) – erst nach Freigabe beginnen.
   M0 (Live-Probe) ist abgeschlossen; Ergebnisse in `GMX-NOTES.md` (Spalte „Ergebnis“, Abschnitt 4) und `docs/probe-2026-11-20-v4.json`.
   Kern: keine Gesendet-Kopie per SMTP (→ `sent_copy_mode=append`), Suchindex ≈ 30 s verzögert, ruhende Verbindungen/IDLE nach ≈ 30 min
   getrennt (`* BYE timeout`), `COPYUID` bei MOVE ungetaggt (nur 1 Messpunkt), Probe v3d nutzt `UNSELECT` statt `CLOSE`.
@@ -39,7 +40,7 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
   Links nur als Domain, Rahmen mit Zufallskennung; optional bereinigtes HTML per `format=html`, nur mit Option `allow_html_output`),
   `envelope.py` (24-KB-Budget, Cursor). Details: SPEC §3 „Umsetzung der Leseaktionen“.
   Prüfungen: 230 HA-Tests + 3 Servertests gegen GreenMail + 29 Probe-Tests grün, Coverage 98 %, ruff, mypy grün.
-  Offen: DECISIONS Nr. 18 und 20 (Bestätigung), Dovecot-Tests, Aufräumen gespeicherter Anhänge, Teil-FETCH bei GMX ungeprüft.
+  Entscheidungen Nr. 18–24 freigegeben. Offen: Dovecot-Tests, Aufräumen gespeicherter Anhänge, Teil-FETCH bei GMX ungeprüft.
 - Repo-Sichtung aus Abschnitt 10 erledigt: `docs/REVIEW-REPOS-2026-11-20.md`.
 - **Noch offen:** IMAP-Abschaltfrist (Langzeitbeobachtung).
 - Alle Annahmen, die in `GMX-NOTES.md` als `U` (unbestätigt) oder `LIVE` markiert sind, nicht als Fakt behandeln.

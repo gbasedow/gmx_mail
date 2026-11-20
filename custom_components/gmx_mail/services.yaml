@@ -1,0 +1,186 @@
+list_folders:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmx_mail
+    include_counts:
+      default: false
+      selector:
+        boolean:
+
+search:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmx_mail
+    folder:
+      default: INBOX
+      example: INBOX
+      selector:
+        text:
+    from:
+      selector:
+        text:
+    to:
+      selector:
+        text:
+    cc:
+      selector:
+        text:
+    subject:
+      selector:
+        text:
+    text:
+      selector:
+        text:
+    body:
+      selector:
+        text:
+    since:
+      selector:
+        date:
+    before:
+      selector:
+        date:
+    seen:
+      selector:
+        boolean:
+    flagged:
+      selector:
+        boolean:
+    answered:
+      selector:
+        boolean:
+    draft:
+      selector:
+        boolean:
+    larger:
+      selector:
+        number:
+          min: 0
+          max: 1000000000
+          mode: box
+          unit_of_measurement: B
+    smaller:
+      selector:
+        number:
+          min: 1
+          max: 1000000000
+          mode: box
+          unit_of_measurement: B
+    keyword:
+      selector:
+        text:
+    uid_range:
+      example: "100:200"
+      selector:
+        text:
+    sort:
+      default: date_desc
+      selector:
+        select:
+          translation_key: sort
+          options:
+            - date_desc
+            - date_asc
+    limit:
+      default: 20
+      selector:
+        number:
+          min: 1
+          max: 50
+          mode: box
+    cursor:
+      selector:
+        text:
+    include_snippet:
+      default: false
+      selector:
+        boolean:
+
+get_message:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmx_mail
+    ref:
+      required: true
+      example: '{"folder": "INBOX", "uid": 123, "uidvalidity": 456}'
+      selector:
+        object:
+    format:
+      default: text
+      selector:
+        select:
+          translation_key: body_format
+          options:
+            - text
+            - html_as_text
+            - html
+            - raw_headers
+    max_chars:
+      default: 8000
+      selector:
+        number:
+          min: 100
+          max: 32000
+          mode: box
+    offset:
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 100000000
+          mode: box
+    headers:
+      selector:
+        text:
+          multiple: true
+
+get_attachment:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmx_mail
+    ref:
+      required: true
+      example: '{"folder": "INBOX", "uid": 123, "uidvalidity": 456}'
+      selector:
+        object:
+    part_id:
+      required: true
+      example: "2"
+      selector:
+        text:
+    mode:
+      default: save
+      selector:
+        select:
+          translation_key: attachment_mode
+          options:
+            - save
+            - base64
+    max_bytes:
+      default: 10485760
+      selector:
+        number:
+          min: 1
+          max: 52428800
+          mode: box
+          unit_of_measurement: B
+
+get_status:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmx_mail

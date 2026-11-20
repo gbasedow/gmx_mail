@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from custom_components.gmx_mail.const import (
+    CONF_ALLOW_HTML_OUTPUT,
     CONF_ALLOWLIST,
     CONF_FOLDER_SENT,
     CONF_IDLE_RENEW_MINUTES,
@@ -41,6 +42,7 @@ def test_defaults_are_valid_and_restrictive() -> None:
     assert options[CONF_SEND_MODE] == "off"
     assert options[CONF_ALLOWLIST] == []
     assert options[CONF_SENT_COPY_MODE] == "append"
+    assert options[CONF_ALLOW_HTML_OUTPUT] is False
 
 
 def test_every_option_has_exactly_one_section() -> None:

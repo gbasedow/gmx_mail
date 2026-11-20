@@ -78,6 +78,7 @@ CONF_SEND_MODE: Final = "send_mode"
 CONF_ALLOWLIST: Final = "allowlist"
 CONF_ALLOW_REPLY_TO_SENDER: Final = "allow_reply_to_sender"
 CONF_ALLOW_PERMANENT_DELETE: Final = "allow_permanent_delete"
+CONF_ALLOW_HTML_OUTPUT: Final = "allow_html_output"
 CONF_MAX_RECIPIENTS: Final = "max_recipients"
 CONF_MAX_SEND_PER_DAY: Final = "max_send_per_day"
 CONF_MAX_DELETE_PER_DAY: Final = "max_delete_per_day"
@@ -131,6 +132,7 @@ DEFAULT_OPTIONS: Final[dict[str, object]] = {
     CONF_ALLOWLIST: [],
     CONF_ALLOW_REPLY_TO_SENDER: False,
     CONF_ALLOW_PERMANENT_DELETE: False,
+    CONF_ALLOW_HTML_OUTPUT: False,
     CONF_MAX_RECIPIENTS: DEFAULT_MAX_RECIPIENTS,
     CONF_MAX_SEND_PER_DAY: DEFAULT_MAX_SEND_PER_DAY,
     CONF_MAX_DELETE_PER_DAY: DEFAULT_MAX_DELETE_PER_DAY,

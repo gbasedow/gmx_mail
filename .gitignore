@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+*.env
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+# Ergebnisse des Live-Tests nur bewusst einchecken (enthalten Ordnernamen/Zähler, keine Inhalte)
+gmx_probe_result*.json
+secrets.yaml

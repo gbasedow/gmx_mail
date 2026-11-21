@@ -30,17 +30,9 @@ jobs:
         run: pytest -q -p no:homeassistant tests/probe
 
   server-tests:
-    # Read operations against a real IMAP server (GreenMail); never a real mail account.
+    # Read path, IDLE and polling against real IMAP servers: GreenMail and a GMX-like Dovecot (TLS with a test CA).
+    # Never a real mail account.
     runs-on: ubuntu-latest
-    services:
-      greenmail:
-        image: greenmail/standalone:2.1.3
-        env:
-          GREENMAIL_OPTS: >-
-            -Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0
-            -Dgreenmail.users=test:secret@example.test -Dgreenmail.users.login=email
-        ports:
-          - 3143:3143
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -48,20 +40,43 @@ jobs:
           python-version: "3.14"
       - name: Install dependencies
         run: pip install -r requirements_dev.txt
-      - name: Wait for GreenMail
+      - name: Test certificates and servers
         run: |
-          python - <<'PY'
-          import imaplib, time
-          for _ in range(60):
-              try:
-                  imaplib.IMAP4("127.0.0.1", 3143).logout()
-                  break
-              except (OSError, imaplib.IMAP4.error):  # port open before the server answers -> abort
-                  time.sleep(2)
-          else:
-              raise SystemExit("GreenMail did not start")
-          PY
+          python tools/make_test_certs.py
+          docker compose up -d greenmail dovecot
+      - name: Wait for the servers
+        run: python tools/wait_for_test_servers.py greenmail dovecot
       - name: Server tests
         env:
           REQUIRE_GREENMAIL: "1"
+          REQUIRE_DOVECOT: "1"
         run: pytest -q -p no:homeassistant -m integration tests/integration
+      - name: Server logs on failure
+        if: failure()
+        run: docker compose logs greenmail dovecot
+
+  staging:
+    # End-to-end in the real Home Assistant target version (container) through its REST/WebSocket APIs.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Install dependencies
+        run: pip install -r requirements_dev.txt
+      - name: Test certificates, wheel, containers
+        run: |
+          python tools/make_test_certs.py
+          pip download --no-deps -d tests/staging/wheels imapclient==4.3.0
+          docker compose up -d dovecot
+          docker compose --profile staging up -d --build homeassistant
+      - name: Wait for the mail server
+        run: python tools/wait_for_test_servers.py dovecot
+      - name: Staging test
+        env:
+          REQUIRE_STAGING: "1"
+        run: pytest -q -p no:homeassistant -m staging tests/staging
+      - name: Home Assistant log on failure
+        if: failure()
+        run: docker compose --profile staging logs homeassistant dovecot

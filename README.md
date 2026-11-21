@@ -16,7 +16,8 @@ durch Claude über den ha-mcp-Server. **Status: Meilenstein M3 (Leseaktionen, Se
 | `tools/gmx_probe.py` | Live-Prüfskript gegen ein GMX-Testkonto (gibt keine Mailinhalte aus) |
 | `custom_components/gmx_mail/` | Die Integration: Flows, Leseaktionen (`services.py`), `client/` (IMAP-Worker, Lesen, Bereinigung, Ordnererkennung, SMTP-Check) |
 | `tests/gmx_mail/` | Tests der Integration mit `pytest-homeassistant-custom-component` (`pytest -q`) |
-| `tests/integration/`, `docker-compose.yml` | Lesetests gegen GreenMail im Container (`pytest -q -p no:homeassistant -m integration tests/integration`) |
+| `tests/integration/`, `docker-compose.yml` | Servertests gegen GreenMail und einen GMX-nahen Dovecot (TLS mit Test-CA) im Container |
+| `tests/staging/` | Ende-zu-Ende-Test mit echtem Home Assistant 2026.11.2 im Container (siehe `tests/staging/README.md`) |
 | `tests/probe/` | Tests des Probe-Skripts gegen einen Fake-IMAP-Server (`pytest -q -p no:homeassistant tests/probe`) |
 | `pyproject.toml`, `requirements_dev.txt` | Konfiguration und Abhängigkeiten für pytest, ruff, mypy (Linux, Python 3.14) |
 | `.github/workflows/` | Tests, ruff, mypy, hassfest, HACS-Validierung |

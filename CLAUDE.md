@@ -19,8 +19,8 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
 
 ## 2. Status
 
-- Stand: 21.11.2026. **M1 und M2 in `main`. M3 (Coordinator, IDLE, Sensoren, Ereignisse, Diagnose, Repairs) umgesetzt auf Branch
-  `claude/wizardly-gauss-af5crm`, Freigabe offen.**
+- Stand: 21.11.2026. **M1–M3 in `main` (PR #4). Offene Tests nachgeholt (Dovecot GMX-nah, Staging mit echtem HA 2026.11.2).
+  Nächster Schritt: M4** (Organisieren, Audit-Log) inkl. der übernommenen offenen Punkte (SPEC §7) – erst nach Freigabe beginnen.
   M0 (Live-Probe) ist abgeschlossen; Ergebnisse in `GMX-NOTES.md` (Spalte „Ergebnis“, Abschnitt 4) und `docs/probe-2026-11-20-v4.json`.
   Kern: keine Gesendet-Kopie per SMTP (→ `sent_copy_mode=append`), Suchindex ≈ 30 s verzögert, ruhende Verbindungen/IDLE nach ≈ 30 min
   getrennt (`* BYE timeout`), `COPYUID` bei MOVE ungetaggt (nur 1 Messpunkt), Probe v3d nutzt `UNSELECT` statt `CLOSE`.
@@ -46,6 +46,9 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
   `sensor.py`, `binary_sensor.py`, `entity.py`, `counter.py` (Aktionen heute), `diagnostics.py`, Repairs `folder_mapping_ambiguous`,
   `uidvalidity_changed`, `server_rules_unavailable`. Details: SPEC §4 „Umsetzung M3“, Entscheidungen Nr. 25–32.
   Prüfungen: 252 HA-Tests + 6 Servertests (GreenMail, inkl. IDLE mit echtem aioimaplib) + 29 Probe-Tests grün, Coverage 98 %, ruff, mypy grün.
+- **Nachgeholte Tests (21.11.2026):** `tests/integration/test_dovecot_gmx.py` (GMX-naher Dovecot, TLS mit Test-CA, echter Produktionspfad
+  inkl. IDLE über TLS) und `tests/staging/` (echtes HA 2026.11.2 im Container, Ende-zu-Ende über REST/WebSocket inkl. IDLE-Ereignis).
+  Beide laufen in der CI. Gefunden: aioimaplib kodiert Ordnernamen nicht (DECISIONS Nr. 36). Entscheidungen Nr. 34–36.
 - Repo-Sichtung aus Abschnitt 10 erledigt: `docs/REVIEW-REPOS-2026-11-20.md`.
 - **Noch offen:** IMAP-Abschaltfrist (Langzeitbeobachtung).
 - Alle Annahmen, die in `GMX-NOTES.md` als `U` (unbestätigt) oder `LIVE` markiert sind, nicht als Fakt behandeln.
@@ -130,7 +133,9 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
 pip install -r requirements_dev.txt   # Linux, Python 3.14 (HA verlangt >= 3.14.2)
 pytest -q                             # Integrationstests (tests/gmx_mail, mit HA-Plugin; blockiert Sockets)
 pytest -q -p no:homeassistant tests/probe   # Tests des Probe-Skripts (Fake-IMAP-Server über Sockets)
-docker compose up -d greenmail && pytest -q -p no:homeassistant -m integration tests/integration   # Servertests (GreenMail)
+python3 tools/make_test_certs.py      # Test-CA für Dovecot (git-ignoriert)
+docker compose up -d greenmail dovecot && pytest -q -p no:homeassistant -m integration tests/integration   # Servertests
+docker compose --profile staging up -d --build homeassistant && pytest -q -p no:homeassistant -m staging tests/staging   # Staging (tests/staging/README.md)
 ruff check . && ruff format --check .
 mypy custom_components/gmx_mail
 # hassfest + HACS-Validierung laufen als GitHub Actions (.github/workflows/validate.yml)

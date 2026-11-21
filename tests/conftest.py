@@ -19,13 +19,14 @@ import pytest
 _HERE = Path(__file__).parent
 _PROBE = _HERE / "probe"
 _SERVER = _HERE / "integration"  # real IMAP server in a container (sockets), like the probe tests
+_STAGING = _HERE / "staging"  # real Home Assistant in a container (HTTP)
 _INTEGRATION = _HERE / "gmx_mail"
 
 
 def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:
     """Ignore the part of the suite that cannot run with the current plugin set."""
     ha_plugin = config.pluginmanager.hasplugin("homeassistant")
-    if ha_plugin and collection_path in (_PROBE, _SERVER):
+    if ha_plugin and collection_path in (_PROBE, _SERVER, _STAGING):
         return True
     if not ha_plugin and collection_path == _INTEGRATION:
         return True

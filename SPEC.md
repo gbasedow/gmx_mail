@@ -229,8 +229,11 @@ Die Allowlist ist die einzige harte technische Grenze gegen Datenabfluss; Token 
 1. **Unit-Tests** mit `pytest-homeassistant-custom-component` (passend zu 2026.11.x): Config-, Options-, Reauth-, Reconfigure-Flow;
    jede Aktion mit Erfolgs-, Validierungs- und Rechtefehler; PolicyEngine, Token, RateLimiter, Sanitizer (Injection-Korpus, versteckter Text, Zero-Width),
    MIME-Parser mit kaputten Strukturen und gemischten Charsets.
-2. **Integrationstests** gegen GreenMail (IMAP/SMTP mit UIDPLUS und MOVE; ab M2 umgesetzt in `tests/integration`, in der CI als
-   Service-Container) und Dovecot im Container (noch nicht umgesetzt) (`docker-compose`, Pytest-Marker `integration`).
+2. **Integrationstests** gegen GreenMail (IMAP/SMTP mit UIDPLUS und MOVE) und einen GMX-nahen Dovecot im Container
+   (`docker-compose`, Pytest-Marker `integration`, umgesetzt in `tests/integration`, in der CI bei jedem Push). Dovecot (seit 21.11.2026):
+   nur TLS mit Test-CA (`tools/make_test_certs.py`), GMX-Capabilities, SPECIAL-USE-Ordner mit Umlauten; geprüft wird der echte
+   Produktionspfad (TLS-Prüfung, ImapWorker, IDLE-Watcher mit aioimaplib über TLS). Das kurze Idle-Timeout ist nicht umgesetzt
+   (Dovecot-Einstellung offen, M4); Reconnect und Erneuerung sind per Unit-Test und kurzer Erneuerungszeit abgedeckt.
    Dovecot GMX-ähnlich konfigurieren: Capabilities wie in M0 gemessen (`docs/probe-2026-11-20-v4.json`, inkl. `APPENDLIMIT=29360128`,
    MOVE, UIDPLUS, SPECIAL-USE, LIST-STATUS, SORT), ohne CONDSTORE/QRESYNC, QUOTA, ESEARCH, UTF8=ACCEPT; Ordner `Gesendet`, `Entwürfe`,
    `Gelöscht`, `Spamverdacht` mit SPECIAL-USE; kurzes Idle-Timeout (z. B. 60 s), um Reconnect und IDLE-Erneuerung zu testen.
@@ -250,10 +253,20 @@ Die Allowlist ist die einzige harte technische Grenze gegen Datenabfluss; Token 
 - **M2:** Leseaktionen (`list_folders`, `search`, `get_message`, `get_attachment`) mit Sanitizer und Paginierung, GreenMail-Tests.
   Vorher `jgalea/mailbox-mcp`, `danieldotnl/ha-mailbox-mcp`, `dadalouis/Home-mail` sichten.
 - **M3:** Coordinator, IDLE, Sensoren, Events, Diagnostics, Repairs.
-- **M4:** Organisieren (Flags, move/copy, Ordner, Spam, Entwürfe) mit Limits und Audit-Log.
+- **M4:** Organisieren (Flags, move/copy, Ordner, Spam, Entwürfe) mit Limits und Audit-Log (`gmx_mail_action_executed`, `get_audit_log`).
+  Übernommene offene Punkte aus M2/M3 (Nutzerentscheidung 21.11.2026):
+  - Freigabe DECISIONS Nr. 32 (Filterregel-Hinweis als ignorierbare Warnung).
+  - Repository-Beschreibung und Topics auf GitHub (Nutzer; HACS-Prüfung bis dahin rot).
+  - Live-Prüfungen gegen GMX mit Testkonto (nur manuell, `tools/gmx_probe.py` erweitern): IDLE-Stabilität über Stunden,
+    Teil-FETCH-Antworten (`BODY.PEEK[x]<0.n>`), Verhalten von SELECT auf `\Recent`.
+  - Aufräumen gespeicherter Anhänge unter `<Medienordner>/gmx_mail/` (bisher M7).
+  - Dovecot mit kurzem Idle-Timeout, um den Reconnect gegen einen echten Server zu prüfen.
+  - Weiter offen (nicht M4): IMAP-Abschaltfrist bei GMX (Langzeitbeobachtung), Stundenlimit für Empfänger (M6).
 - **M5:** Löschen (`trash`, `delete_permanently` mit Token).
 - **M6:** Senden, Antworten, Weiterleiten mit Versand-Modus, Allowlist, Token und Gesendet-Strategie nach M0-Befund.
 - **M7:** Härtung (Injection-Korpus, Fuzzing des MIME-Parsers), Doku, HACS-Release, ha-mcp-Ende-zu-Ende-Test auf Staging.
+  (Ein Staging-Test mit echtem HA 2026.11.2 im Container über die HA-APIs läuft seit 21.11.2026 in der CI, `tests/staging`;
+  in M7 kommt der Aufruf über ha-mcp selbst dazu.)
 
 Nach jeder Etappe: Tests grün, Kurzbericht, Freigabe abwarten.
 

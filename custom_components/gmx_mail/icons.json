@@ -1,9 +1,40 @@
 {
   "services": {
-    "list_folders": { "service": "mdi:folder-multiple-outline" },
-    "search": { "service": "mdi:email-search-outline" },
-    "get_message": { "service": "mdi:email-open-outline" },
-    "get_attachment": { "service": "mdi:paperclip" },
-    "get_status": { "service": "mdi:information-outline" }
+    "list_folders": {
+      "service": "mdi:folder-multiple-outline"
+    },
+    "search": {
+      "service": "mdi:email-search-outline"
+    },
+    "get_message": {
+      "service": "mdi:email-open-outline"
+    },
+    "get_attachment": {
+      "service": "mdi:paperclip"
+    },
+    "get_status": {
+      "service": "mdi:information-outline"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "unseen_inbox": {
+        "default": "mdi:email-alert-outline"
+      },
+      "junk_messages": {
+        "default": "mdi:email-remove-outline"
+      },
+      "last_sync": {
+        "default": "mdi:sync"
+      },
+      "actions_today": {
+        "default": "mdi:counter"
+      }
+    },
+    "binary_sensor": {
+      "connection": {
+        "default": "mdi:email-sync-outline"
+      }
+    }
   }
 }

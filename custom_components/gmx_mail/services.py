@@ -52,6 +52,7 @@ from .const import (
     DOMAIN,
     FolderRole,
     Permission,
+    PushState,
 )
 from .envelope import InvalidCursorError, build_envelope, decode_cursor, encode_cursor, fit_list, fit_text, query_hash
 
@@ -179,6 +180,7 @@ async def _run[T](entry: ConfigEntry, func: Callable[[ImapSession], T], *, folde
     except (GmxMailError, IMAPClientError) as err:
         _LOGGER.debug("IMAP command failed: %s", type(err).__name__)
         raise HomeAssistantError(translation_domain=DOMAIN, translation_key="imap_error") from err
+    entry.runtime_data.counter.increment(Permission.READ.value)
     return result
 
 
@@ -370,8 +372,10 @@ async def _get_status(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse
         "append_limit": info.append_limit,
         "folders_map": data.folder_map.as_dict(),
         "unseen_inbox": unseen,
-        "idle_active": False,  # IDLE watcher follows in M3
-        "last_sync": None,  # coordinator follows in M3
+        "idle_active": data.push_state is PushState.CONNECTED,
+        "push_state": data.push_state.value,
+        "last_sync": data.coordinator.data.last_sync.isoformat() if data.coordinator.data else None,
+        "limits_used": {"actions_today": data.counter.counts},
         "permissions": options.get(CONF_PERMISSIONS, []),
         "send_mode": options.get(CONF_SEND_MODE),
         "allowlist_entries": len(options.get(CONF_ALLOWLIST, [])),

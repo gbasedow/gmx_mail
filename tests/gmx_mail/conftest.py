@@ -22,7 +22,7 @@ from custom_components.gmx_mail.const import (
     DOMAIN,
 )
 
-from .fakes import EMAIL, PASSWORD, FakeImapServer, FakeSmtpServer
+from .fakes import EMAIL, PASSWORD, FakeIdleServer, FakeImapServer, FakeSmtpServer
 
 ENTRY_DATA: dict[str, Any] = {
     CONF_EMAIL: EMAIL,
@@ -39,6 +39,14 @@ ENTRY_DATA: dict[str, Any] = {
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
     """Load custom_components in every test."""
+
+
+@pytest.fixture(autouse=True)
+def idle_server() -> Generator[FakeIdleServer]:
+    """Replace the aioimaplib client of the IDLE watcher in every test (never a real connection)."""
+    server = FakeIdleServer()
+    with patch("custom_components.gmx_mail.client.idle.create_idle_client", server):
+        yield server
 
 
 @pytest.fixture

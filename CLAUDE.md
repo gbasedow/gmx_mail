@@ -19,8 +19,8 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
 
 ## 2. Status
 
-- Stand: 20.11.2026. **M1 und M2 (Leseaktionen) abgeschlossen und vom Nutzer freigegeben. Nächster Schritt: M3** (Coordinator, IDLE,
-  Sensoren, Ereignisse, Diagnose, Repairs) – erst nach Freigabe beginnen.
+- Stand: 21.11.2026. **M1 und M2 in `main`. M3 (Coordinator, IDLE, Sensoren, Ereignisse, Diagnose, Repairs) umgesetzt auf Branch
+  `claude/wizardly-gauss-af5crm`, Freigabe offen.**
   M0 (Live-Probe) ist abgeschlossen; Ergebnisse in `GMX-NOTES.md` (Spalte „Ergebnis“, Abschnitt 4) und `docs/probe-2026-11-20-v4.json`.
   Kern: keine Gesendet-Kopie per SMTP (→ `sent_copy_mode=append`), Suchindex ≈ 30 s verzögert, ruhende Verbindungen/IDLE nach ≈ 30 min
   getrennt (`* BYE timeout`), `COPYUID` bei MOVE ungetaggt (nur 1 Messpunkt), Probe v3d nutzt `UNSELECT` statt `CLOSE`.
@@ -41,6 +41,11 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
   `envelope.py` (24-KB-Budget, Cursor). Details: SPEC §3 „Umsetzung der Leseaktionen“.
   Prüfungen: 230 HA-Tests + 3 Servertests gegen GreenMail + 29 Probe-Tests grün, Coverage 98 %, ruff, mypy grün.
   Entscheidungen Nr. 18–24 freigegeben. Offen: Dovecot-Tests, Aufräumen gespeicherter Anhänge, Teil-FETCH bei GMX ungeprüft.
+- **M3-Umfang:** `client/idle.py` (IDLE-Watcher, aioimaplib 2.0.1, nur implizites TLS, SELECT statt EXAMINE – siehe DECISIONS Nr. 31),
+  `coordinator.py` (STATUS-Zähler, neue Mails über letzte UID, Ereignis `gmx_mail_new_message`, max. 20 je Aktualisierung),
+  `sensor.py`, `binary_sensor.py`, `entity.py`, `counter.py` (Aktionen heute), `diagnostics.py`, Repairs `folder_mapping_ambiguous`,
+  `uidvalidity_changed`, `server_rules_unavailable`. Details: SPEC §4 „Umsetzung M3“, Entscheidungen Nr. 25–32.
+  Prüfungen: 252 HA-Tests + 6 Servertests (GreenMail, inkl. IDLE mit echtem aioimaplib) + 29 Probe-Tests grün, Coverage 98 %, ruff, mypy grün.
 - Repo-Sichtung aus Abschnitt 10 erledigt: `docs/REVIEW-REPOS-2026-11-20.md`.
 - **Noch offen:** IMAP-Abschaltfrist (Langzeitbeobachtung).
 - Alle Annahmen, die in `GMX-NOTES.md` als `U` (unbestätigt) oder `LIVE` markiert sind, nicht als Fakt behandeln.

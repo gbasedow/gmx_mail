@@ -141,6 +141,11 @@ class GmxMailCoordinator(DataUpdateCoordinator[MailboxData]):
             self.last_uid, self.uidvalidity = result.last_uid, result.uidvalidity
             self._store.async_delay_save(lambda: {"last_uid": self.last_uid, "uidvalidity": self.uidvalidity}, 5)
 
+    async def async_flush(self) -> None:
+        """Write the last seen UID now (unload/reload), so no new message is announced twice."""
+        if self.last_uid is not None:
+            await self._store.async_save({"last_uid": self.last_uid, "uidvalidity": self.uidvalidity})
+
     async def async_remove_store(self) -> None:
         """Delete persisted state (entry removed)."""
         await self._store.async_remove()

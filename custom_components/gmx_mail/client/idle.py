@@ -90,6 +90,14 @@ def mailbox_argument(name: str) -> str:
     return '"' + encoded.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+def _said_bye(push_task: asyncio.Future[Any]) -> bool:
+    """Return whether the push contained ``* BYE`` (the server closes the connection right after)."""
+    if not push_task.done() or push_task.cancelled() or push_task.exception() is not None:
+        return False
+    push = push_task.result()
+    return isinstance(push, list) and any(isinstance(line, bytes) and b"BYE" in line for line in push)
+
+
 class _IdleUnsupportedError(Exception):
     """The server does not announce IDLE after login."""
 
@@ -228,11 +236,16 @@ class IdleWatcher:
                 for task in (push_task, lost_task):
                     if not task.done():
                         task.cancel()
-                if client.has_pending_idle():
-                    client.idle_done()
-                with contextlib.suppress(AioImapException, TimeoutError, asyncio.CancelledError):
-                    async with asyncio.timeout(IDLE_ACK_TIMEOUT_S):
-                        await idle
+                if self._lost.is_set() or _said_bye(push_task):
+                    # The socket is gone or closing (* BYE): no DONE, no waiting for an acknowledgement that cannot come.
+                    self._lost.set()
+                    idle.cancel()
+                else:
+                    if client.has_pending_idle():
+                        client.idle_done()
+                    with contextlib.suppress(AioImapException, TimeoutError, asyncio.CancelledError):
+                        async with asyncio.timeout(IDLE_ACK_TIMEOUT_S):
+                            await idle
             if push == STOP_WAIT_SERVER_PUSH:
                 continue  # renewal: DONE was sent, start a new IDLE
             lines = [line for line in push if isinstance(line, bytes)]
@@ -243,7 +256,7 @@ class IdleWatcher:
 
     async def _cleanup(self) -> None:
         client, self._client = self._client, None
-        if client is not None:
+        if client is not None and not self._lost.is_set():  # LOGOUT only on a living connection
             with contextlib.suppress(AioImapException, OSError, TimeoutError, asyncio.CancelledError):
                 async with asyncio.timeout(IDLE_ACK_TIMEOUT_S):
                     await client.logout()

@@ -14,6 +14,33 @@
     },
     "get_status": {
       "service": "mdi:information-outline"
+    },
+    "get_audit_log": {
+      "service": "mdi:clipboard-text-clock-outline"
+    },
+    "set_flags": {
+      "service": "mdi:flag-outline"
+    },
+    "move": {
+      "service": "mdi:folder-move-outline"
+    },
+    "copy": {
+      "service": "mdi:content-copy"
+    },
+    "mark_spam": {
+      "service": "mdi:email-alert"
+    },
+    "mark_not_spam": {
+      "service": "mdi:email-check-outline"
+    },
+    "create_folder": {
+      "service": "mdi:folder-plus-outline"
+    },
+    "rename_folder": {
+      "service": "mdi:folder-edit-outline"
+    },
+    "save_draft": {
+      "service": "mdi:email-edit-outline"
     }
   },
   "entity": {

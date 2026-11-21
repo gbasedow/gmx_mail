@@ -92,6 +92,7 @@ CONF_FOLDER_JUNK: Final = "folder_junk"
 CONF_EVENT_INCLUDE_HEADERS: Final = "event_include_headers"
 CONF_SENT_COPY_MODE: Final = "sent_copy_mode"
 CONF_AUDIT_RETENTION_DAYS: Final = "audit_retention_days"
+CONF_ATTACHMENT_RETENTION_DAYS: Final = "attachment_retention_days"
 
 SECTION_PERMISSIONS: Final = "permissions_section"
 SECTION_SENDING: Final = "sending_section"
@@ -123,6 +124,8 @@ DEFAULT_IDLE_RENEW_MINUTES: Final = 24
 AUDIT_RETENTION_MIN_DAYS: Final = 1
 AUDIT_RETENTION_MAX_DAYS: Final = 365
 DEFAULT_AUDIT_RETENTION_DAYS: Final = 90
+ATTACHMENT_RETENTION_MAX_DAYS: Final = 365
+DEFAULT_ATTACHMENT_RETENTION_DAYS: Final = 7  # 0 = never delete saved attachments
 
 ALLOWLIST_WILDCARD: Final = "*"
 
@@ -146,6 +149,7 @@ DEFAULT_OPTIONS: Final[dict[str, object]] = {
     CONF_EVENT_INCLUDE_HEADERS: False,
     CONF_SENT_COPY_MODE: SentCopyMode.APPEND.value,
     CONF_AUDIT_RETENTION_DAYS: DEFAULT_AUDIT_RETENTION_DAYS,
+    CONF_ATTACHMENT_RETENTION_DAYS: DEFAULT_ATTACHMENT_RETENTION_DAYS,
 }
 
 # --------------------------------------------------------------------------- connection handling
@@ -169,6 +173,12 @@ MAX_NEW_MESSAGE_EVENTS: Final = 20  # per update; more are counted but not annou
 REFRESH_COOLDOWN_S: Final = 5.0
 
 EVENT_NEW_MESSAGE: Final = "gmx_mail_new_message"
+EVENT_ACTION_EXECUTED: Final = "gmx_mail_action_executed"
+
+# --------------------------------------------------------------------------- organising (M4)
+
+MAX_REFS_PER_CALL: Final = 100
+ATTACHMENT_CLEANUP_TIME: Final = (3, 17, 0)  # local time, once a day
 
 
 class PushState(StrEnum):

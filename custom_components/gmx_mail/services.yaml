@@ -184,3 +184,174 @@ get_status:
       selector:
         config_entry:
           integration: gmx_mail
+
+get_audit_log:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmx_mail
+    limit:
+      default: 50
+      selector:
+        number:
+          min: 1
+          max: 200
+          mode: box
+
+set_flags:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmx_mail
+    refs:
+      required: true
+      example: '[{"folder": "INBOX", "uid": 123, "uidvalidity": 456}]'
+      selector:
+        object:
+    add:
+      example: '["seen", "$Steuer"]'
+      selector:
+        text:
+          multiple: true
+    remove:
+      selector:
+        text:
+          multiple: true
+
+move:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmx_mail
+    refs:
+      required: true
+      example: '[{"folder": "INBOX", "uid": 123, "uidvalidity": 456}]'
+      selector:
+        object:
+    target_folder:
+      required: true
+      example: Archiv
+      selector:
+        text:
+
+copy:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmx_mail
+    refs:
+      required: true
+      example: '[{"folder": "INBOX", "uid": 123, "uidvalidity": 456}]'
+      selector:
+        object:
+    target_folder:
+      required: true
+      example: Archiv
+      selector:
+        text:
+
+mark_spam:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmx_mail
+    refs:
+      required: true
+      example: '[{"folder": "INBOX", "uid": 123, "uidvalidity": 456}]'
+      selector:
+        object:
+
+mark_not_spam:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmx_mail
+    refs:
+      required: true
+      example: '[{"folder": "Spamverdacht", "uid": 7, "uidvalidity": 456}]'
+      selector:
+        object:
+
+create_folder:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmx_mail
+    name:
+      required: true
+      example: "2026"
+      selector:
+        text:
+    parent:
+      example: Rechnungen
+      selector:
+        text:
+
+rename_folder:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmx_mail
+    path:
+      required: true
+      example: Rechnungen/2026
+      selector:
+        text:
+    new_name:
+      required: true
+      example: "2026 erledigt"
+      selector:
+        text:
+
+save_draft:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmx_mail
+    to:
+      selector:
+        text:
+          multiple: true
+          type: email
+    cc:
+      selector:
+        text:
+          multiple: true
+          type: email
+    bcc:
+      selector:
+        text:
+          multiple: true
+          type: email
+    subject:
+      selector:
+        text:
+    body_text:
+      selector:
+        text:
+          multiline: true
+    body_html:
+      selector:
+        text:
+          multiline: true
+    in_reply_to_ref:
+      selector:
+        object:

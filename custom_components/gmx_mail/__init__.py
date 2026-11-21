@@ -15,17 +15,22 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import issue_registry as ir
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.event import async_track_time_change, async_track_time_interval
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util.ssl import create_client_context
 
+from .attachments import attachment_dir, remove_old_files
+from .audit import AuditLog
 from .client.errors import GmxAuthError, GmxMailError, GmxTlsError
 from .client.folders import FolderMap, map_special_folders
 from .client.idle import IdleWatcher
 from .client.imap import ConnectionLimiter, ImapSettings, ImapWorker, ServerInfo, tls_context_with_minimum
 from .client.smtp import SmtpSettings
 from .const import (
+    ATTACHMENT_CLEANUP_TIME,
+    CONF_ATTACHMENT_RETENTION_DAYS,
+    CONF_AUDIT_RETENTION_DAYS,
     CONF_EMAIL,
     CONF_IDLE_ENABLED,
     CONF_IDLE_RENEW_MINUTES,
@@ -69,6 +74,7 @@ class GmxMailRuntimeData:
     options: dict[str, Any]
     coordinator: GmxMailCoordinator
     counter: ActionCounter
+    audit: AuditLog
     idle: IdleWatcher | None = None
     push_unavailable: PushState | None = None  # DISABLED or UNSUPPORTED when no watcher runs
 
@@ -180,6 +186,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: GmxMailConfigEntry) -> b
 
     counter = ActionCounter(hass, entry.entry_id)
     await counter.async_load()
+    audit = AuditLog(hass, entry.entry_id, int(options[CONF_AUDIT_RETENTION_DAYS]))
+    await audit.async_load()
     coordinator = GmxMailCoordinator(hass, entry, worker, folder_map, options)
     entry.runtime_data = GmxMailRuntimeData(
         worker=worker,
@@ -189,6 +197,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: GmxMailConfigEntry) -> b
         options=options,
         coordinator=coordinator,
         counter=counter,
+        audit=audit,
     )
     try:
         await coordinator.async_config_entry_first_refresh()
@@ -201,9 +210,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: GmxMailConfigEntry) -> b
 
     entry.async_on_unload(async_track_time_interval(hass, _close_if_idle, timedelta(seconds=IDLE_CHECK_INTERVAL_S)))
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+    _async_schedule_attachment_cleanup(hass, entry, int(options[CONF_ATTACHMENT_RETENTION_DAYS]))
     _async_start_push(hass, entry)  # before the platforms, so the connection sensor shows the right push state
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
+
+
+@callback
+def _async_schedule_attachment_cleanup(hass: HomeAssistant, entry: GmxMailConfigEntry, days: int) -> None:
+    """Remove saved attachments older than ``days`` now and once a day (0 = keep everything)."""
+    if days <= 0:
+        return
+    directory = attachment_dir(hass, entry.entry_id)
+
+    async def _cleanup(_now: datetime | None = None) -> None:
+        removed = await hass.async_add_executor_job(remove_old_files, directory, days)
+        if removed:
+            _LOGGER.debug("Removed %s saved attachment(s) older than %s days", removed, days)
+
+    hour, minute, second = ATTACHMENT_CLEANUP_TIME
+    entry.async_on_unload(async_track_time_change(hass, _cleanup, hour=hour, minute=minute, second=second))
+    entry.async_create_background_task(hass, _cleanup(), f"{DOMAIN} attachment cleanup {entry.entry_id}")
 
 
 @callback
@@ -306,5 +333,5 @@ async def async_remove_entry(hass: HomeAssistant, entry: GmxMailConfigEntry) -> 
         ir.async_delete_issue(hass, DOMAIN, issue)
     if not hass.config_entries.async_entries(DOMAIN):
         ir.async_delete_issue(hass, DOMAIN, ISSUE_SERVER_RULES_UNAVAILABLE)
-    for key in ("actions", "state"):
+    for key in ("actions", "state", "audit"):
         await Store[dict[str, Any]](hass, 1, f"{DOMAIN}.{entry.entry_id}.{key}").async_remove()

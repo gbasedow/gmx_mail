@@ -1,0 +1,10 @@
+{
+  "tool": "gmx_live_check",
+  "cleanup_only": {
+    "ok": true,
+    "errors": [],
+    "folders_deleted": 2,
+    "inbox_deleted": 3,
+    "drafts_deleted": 1
+  }
+}

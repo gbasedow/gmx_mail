@@ -102,3 +102,12 @@ class GmxProtectedFolderError(GmxMailError):
 
 class GmxMessageTooLargeError(GmxMailError):
     """The message exceeds the server's APPENDLIMIT."""
+
+
+class GmxDeleteRuleError(GmxMailError):
+    """A deleting action is not allowed for these messages or this folder (``reason`` is the translation key)."""
+
+    def __init__(self, reason: str) -> None:
+        """Store a translation-key-like reason."""
+        super().__init__(reason)
+        self.reason = reason

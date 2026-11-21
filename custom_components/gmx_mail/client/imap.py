@@ -115,6 +115,9 @@ class ImapSession(Protocol):
     def rename_folder(self, old_name: str, new_name: str) -> Any:
         """RENAME."""
 
+    def delete_folder(self, folder: str) -> Any:
+        """DELETE (a folder)."""
+
     def append(self, folder: str, msg: bytes, flags: Sequence[str] = (), msg_time: Any = None) -> Any:
         """APPEND."""
 

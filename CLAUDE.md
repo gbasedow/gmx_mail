@@ -149,6 +149,7 @@ mypy custom_components/gmx_mail
 # HACS-Action prüft nur öffentliche Repos (bei privatem Repo wird der Job übersprungen)
 GMX_USER=... GMX_PASS=... python3 tools/gmx_probe.py   # nur manuell, Test-Konto
 GMX_USER=... GMX_PASS=... python3 tools/gmx_live_check.py --idle-minutes 2 --output live_check.json   # nur manuell, Python 3.14: Produktionscode gegen GMX (35 min für BYE)
+GMX_USER=... GMX_PASS=... python3 tools/gmx_live_check.py --cleanup-only --output cleanup.json   # entfernt Reste früherer Live-Check-Läufe
 ```
 
 ## 9. Meilensteine (Kurzfassung, Details in `SPEC.md`)

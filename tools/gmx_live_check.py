@@ -11,7 +11,8 @@ Answers the open M4 questions (SPEC section 7) with the code that Home Assistant
 
 Safety rules (same as tools/gmx_probe.py):
   * credentials only from the environment (GMX_USER, GMX_PASS); prefer an app password of a test account;
-  * works only in its own new test folder (aborts if it exists) and deletes exactly the messages it created;
+  * works only in its own new test folder (aborts if it exists) and deletes exactly the messages it created
+    (found by its own Message-ID and draft subject, over a fresh connection); ``--cleanup-only`` removes leftovers of earlier runs;
   * prints metadata only: no addresses, subjects or content.
 
 Usage:
@@ -28,6 +29,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import email
 import importlib.util
 import json
 import os
@@ -41,6 +43,9 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGE = ROOT / "custom_components" / "gmx_mail"
+DRAFT_SUBJECT = "gmx_mail live check draft"
+MESSAGE_ID_DOMAIN = "@gmx-mail-live-check"
+CLEANUP_SCAN = 200  # newest messages per folder inspected by the clean-up
 
 
 def _load_client() -> types.SimpleNamespace:
@@ -88,66 +93,78 @@ def _message(user: str, marker: str, index: int) -> bytes:
 
 
 def run_checks(args: argparse.Namespace, user: str, password: str) -> dict[str, Any]:
-    """Run all checks and return a JSON-serialisable report (metadata only)."""
+    """Run all checks and return a JSON-serialisable report (metadata only).
+
+    The work connection is closed before the long IDLE wait (GMX drops connections idle for ~30 min), and the clean-up
+    uses a fresh connection, so a dropped connection can never leave test data behind.
+    """
     c = _load_client()
     settings = c.imap.ImapSettings(host=args.host, port=args.port, security=c.const.Security.SSL, username=user, password=password)
     report: dict[str, Any] = {"tool": "gmx_live_check", "started": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
     context = _context(args.cafile, c.imap)
-    session = c.imap.open_imap_connection(settings, context)
     marker = uuid.uuid4().hex[:10]
     test_folder = f"{args.folder_prefix}-{marker}"
-    created_drafts: list[int] = []
     try:
-        info = c.imap.probe_server(session)
-        folder_map = c.folders.map_special_folders(info.folders)
-        report["capabilities"] = sorted(info.capabilities)
-        report["special_folders"] = folder_map.as_dict()
-        if any(f.name == test_folder for f in info.folders):
-            raise SystemExit("test folder exists - aborting")
-        session.create_folder(test_folder)
-        target = f"{test_folder}{next((f.delimiter for f in info.folders if f.delimiter), '/')}Ziel"
-        session.create_folder(target)
-        for index in range(3):
-            session.append(test_folder, _message(user, marker, index))
-        report["recent_after_select"] = _recent_check(c, settings, context, session, test_folder)
-        session.select_folder(test_folder, readonly=True)
-        uids = sorted(session.search(["ALL"]))
-        validity = session.folder_status(test_folder, ["UIDVALIDITY"])[b"UIDVALIDITY"]
-        # Partial FETCH exactly as the reader does it (GreenMail answers it in a form imapclient cannot parse).
-        partial = c.reader._fetch_partial(session, uids[:1], "1", 64)
-        report["partial_fetch"] = "parsed" if partial is not None else "fallback_needed"
-        session.unselect_folder()
-        refs = [c.reader.MailRef(test_folder, uid, int(validity)) for uid in uids]
-
-        copied = c.writer.copy_or_move(session, info, refs[:1], target, move=False)
-        report["copy"] = {"count": copied.count, "new_refs_known": copied.new_refs[0] is not None, "warnings": copied.warnings}
-        store = c.writer._response_store(session)
-        moved = c.writer.copy_or_move(session, info, refs[1:2], target, move=True)
-        report["move"] = {
-            "count": moved.count,
-            "new_refs_known": moved.new_refs[0] is not None,
-            "via_copyuid": not moved.warnings and bool(store is not None and store.get("COPYUID")),
-            "warnings": moved.warnings,
-        }
-        flags = c.writer.set_flags(session, info, refs[2:3], ["flagged", "$GmxMailLiveCheck"], [])
-        report["set_flags"] = {"count": flags.count}
-
-        draft = c.writer.DraftInput(sender=user, to=[user], subject="gmx_mail live check draft", body_text="Entwurf (Live-Check)")
-        ref, size = c.writer.save_draft(session, info, folder_map, draft)
-        report["draft"] = {
-            "ref_known": ref is not None,
-            "size": size,
-            "folder_role_ok": bool(ref and ref["folder"] == folder_map.get(c.const.FolderRole.DRAFTS)),
-        }
-        if ref:
-            created_drafts.append(int(ref["uid"]))
-
-        report["idle"] = asyncio.run(_idle_check(c, settings, context, user, password, marker, args.idle_minutes, args.host, args.port))
+        session = c.imap.open_imap_connection(settings, context)
+        try:
+            _work_checks(c, session, settings, context, user, marker, test_folder, report)
+        finally:
+            with contextlib.suppress(Exception):
+                session.logout()
+        report["idle"] = asyncio.run(_idle_check(c, settings, context, user, marker, args.idle_minutes))
+    except Exception as err:  # noqa: BLE001 - recorded in the report; clean-up still runs
+        report["aborted"] = type(err).__name__
     finally:
-        _cleanup(session, c, folder_map if "folder_map" in locals() else None, test_folder, created_drafts, report)
-        session.logout()
+        report["cleanup"] = _cleanup(c, settings, context, args.folder_prefix, marker)
     report["finished"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
     return report
+
+
+def _work_checks(
+    c: Any, session: Any, settings: Any, context: ssl.SSLContext, user: str, marker: str, folder: str, report: dict[str, Any]
+) -> None:
+    """Checks on the work connection (the code paths of the integration's actions)."""
+    info = c.imap.probe_server(session)
+    folder_map = c.folders.map_special_folders(info.folders)
+    report["capabilities"] = sorted(info.capabilities)
+    report["special_folders"] = folder_map.as_dict()
+    if any(f.name == folder for f in info.folders):
+        raise SystemExit("test folder exists - aborting")
+    session.create_folder(folder)
+    target = f"{folder}{next((f.delimiter for f in info.folders if f.delimiter), '/')}Ziel"
+    session.create_folder(target)
+    for index in range(3):
+        session.append(folder, _message(user, marker, index))
+    report["recent_after_select"] = _recent_check(c, settings, context, session, folder)
+    session.select_folder(folder, readonly=True)
+    uids = sorted(session.search(["ALL"]))
+    validity = session.folder_status(folder, ["UIDVALIDITY"])[b"UIDVALIDITY"]
+    # Partial FETCH exactly as the reader does it (GreenMail answers it in a form imapclient cannot parse).
+    partial = c.reader._fetch_partial(session, uids[:1], "1", 64)
+    report["partial_fetch"] = "parsed" if partial is not None else "fallback_needed"
+    session.unselect_folder()
+    refs = [c.reader.MailRef(folder, uid, int(validity)) for uid in uids]
+
+    copied = c.writer.copy_or_move(session, info, refs[:1], target, move=False)
+    report["copy"] = {"count": copied.count, "new_refs_known": copied.new_refs[0] is not None, "warnings": copied.warnings}
+    store = c.writer._response_store(session)
+    moved = c.writer.copy_or_move(session, info, refs[1:2], target, move=True)
+    report["move"] = {
+        "count": moved.count,
+        "new_refs_known": moved.new_refs[0] is not None,
+        "via_copyuid": not moved.warnings and bool(store is not None and store.get("COPYUID")),
+        "warnings": moved.warnings,
+    }
+    flags = c.writer.set_flags(session, info, refs[2:3], ["flagged", "$GmxMailLiveCheck"], [])
+    report["set_flags"] = {"count": flags.count}
+
+    draft = c.writer.DraftInput(sender=user, to=[user], subject=f"{DRAFT_SUBJECT} {marker}", body_text="Entwurf (Live-Check)")
+    ref, size = c.writer.save_draft(session, info, folder_map, draft)
+    report["draft"] = {
+        "ref_known": ref is not None,
+        "size": size,
+        "folder_role_ok": bool(ref and ref["folder"] == folder_map.get(c.const.FolderRole.DRAFTS)),
+    }
 
 
 def _recent_check(c: Any, settings: Any, context: ssl.SSLContext, session: Any, folder: str) -> dict[str, Any]:
@@ -163,9 +180,7 @@ def _recent_check(c: Any, settings: Any, context: ssl.SSLContext, session: Any, 
     return {"status_before": before, "on_select": selected, "status_after": after, "cleared_by_select": bool(before) and not after}
 
 
-async def _idle_check(
-    c: Any, settings: Any, context: ssl.SSLContext, user: str, password: str, marker: str, minutes: float, host: str, port: int
-) -> dict[str, Any]:
+async def _idle_check(c: Any, settings: Any, context: ssl.SSLContext, user: str, marker: str, minutes: float) -> dict[str, Any]:
     """IDLE on the INBOX: notification for an appended message, then wait ``minutes`` and record BYE/reconnects."""
     changes: list[float] = []
     states: list[tuple[float, str]] = []
@@ -195,7 +210,7 @@ async def _idle_check(
         appended_at = time.monotonic() - start
 
         def _append() -> None:
-            helper = c.imap.open_imap_connection(c.imap.ImapSettings(host, port, c.const.Security.SSL, user, password), context)
+            helper = c.imap.open_imap_connection(settings, context)
             helper.append("INBOX", _message(user, marker, 99))
             helper.logout()
 
@@ -216,30 +231,83 @@ async def _idle_check(
     return result
 
 
-def _cleanup(session: Any, c: Any, folder_map: Any, test_folder: str, drafts: list[int], report: dict[str, Any]) -> None:
-    """Delete only what this run created: its test folders, its drafts and its INBOX message (by Message-ID)."""
-    errors: list[str] = []
+def _own_messages(session: Any, folder: str, wanted: Any) -> list[int]:
+    """UIDs among the newest ``CLEANUP_SCAN`` messages whose headers satisfy ``wanted`` (FETCH, never SEARCH).
+
+    SEARCH is not used: GMX found nothing with ``SEARCH HEADER Message-ID`` (live check of 21.11.2026).
+    """
+    session.select_folder(folder)
+    uids = sorted(session.search(["ALL"]))[-CLEANUP_SCAN:]
+    found: list[int] = []
+    if uids:
+        for uid, item in session.fetch(uids, ["FLAGS", "BODY.PEEK[HEADER.FIELDS (MESSAGE-ID SUBJECT)]"]).items():
+            headers = email.message_from_bytes(next((v for k, v in item.items() if k.startswith(b"BODY")), b"") or b"")
+            flags = {f.decode() if isinstance(f, bytes) else str(f) for f in item.get(b"FLAGS", ())}
+            if wanted(str(headers.get("Message-ID", "")), str(headers.get("Subject", "")), flags):
+                found.append(uid)
+    return found
+
+
+def _delete_own(session: Any, folder: str, uids: list[int]) -> None:
+    """Delete exactly these UIDs (UIDPLUS UID EXPUNGE), never a mailbox-wide EXPUNGE; leave with UNSELECT."""
     try:
-        for folder in sorted(
-            {f.name for f in c.folders.parse_folder_list(session.list_folders()) if f.name.startswith(test_folder)}, reverse=True
-        ):
-            session.delete_folder(folder)
+        if uids:
+            session.add_flags(uids, [b"\\Deleted"], silent=True)
+            session.uid_expunge(uids)
+    finally:
+        session.unselect_folder()
+
+
+def _cleanup(c: Any, settings: Any, context: ssl.SSLContext, prefix: str, marker: str | None) -> dict[str, Any]:
+    """Remove the test data of this run (``marker``) or, with ``marker=None``, of all earlier runs - over a fresh connection.
+
+    Only data the tool itself creates is matched: folders ``<prefix>-…``, INBOX messages with the Message-ID
+    ``<…@gmx-mail-live-check>`` and drafts flagged ``\\Draft`` whose subject starts with the draft subject.
+    """
+    result: dict[str, Any] = {"ok": False, "errors": [], "folders_deleted": 0, "inbox_deleted": 0, "drafts_deleted": 0}
+    tag = f"{prefix}-{marker}" if marker else f"{prefix}-"
+    try:
+        session = c.imap.open_imap_connection(settings, context)
     except Exception as err:  # noqa: BLE001 - report, never raise during cleanup
-        errors.append(f"folders: {type(err).__name__}")
-    drafts_folder = folder_map.get(c.const.FolderRole.DRAFTS) if folder_map else None
-    for folder, uids in ((drafts_folder, drafts), ("INBOX", None)):
-        if not folder:
-            continue
-        try:
-            session.select_folder(folder)
-            own = uids if uids is not None else session.search(["HEADER", "Message-ID", "gmx-mail-live-check"])
-            if own:
-                session.add_flags(own, [b"\\Deleted"], silent=True)
-                session.uid_expunge(own)  # exactly these UIDs (UIDPLUS), never a mailbox-wide EXPUNGE
-            session.unselect_folder()
-        except Exception as err:  # noqa: BLE001 - report, never raise during cleanup
-            errors.append(f"{'drafts' if folder != 'INBOX' else 'inbox'}: {type(err).__name__}")
-    report["cleanup"] = {"ok": not errors, "errors": errors}
+        result["errors"].append(f"connect: {type(err).__name__}")
+        return result
+    try:
+        info = c.imap.probe_server(session)
+        drafts_folder = c.folders.map_special_folders(info.folders).get(c.const.FolderRole.DRAFTS)
+        steps = (
+            ("folders", None, None),
+            (
+                "inbox",
+                "INBOX",
+                lambda mid, _subject, _flags: mid.endswith(MESSAGE_ID_DOMAIN + ">") and (marker is None or f"<{marker}-" in mid),
+            ),
+            (
+                "drafts",
+                drafts_folder,
+                lambda _mid, subject, flags: (
+                    "\\Draft" in flags and (subject == f"{DRAFT_SUBJECT} {marker}" if marker else subject.startswith(DRAFT_SUBJECT))
+                ),
+            ),
+        )
+        for name, folder, wanted in steps:
+            try:
+                if name == "folders":
+                    own = sorted({f.name for f in info.folders if f.name.startswith(tag)}, reverse=True)  # children first
+                    for path in own:
+                        session.delete_folder(path)
+                    result["folders_deleted"] = len(own)
+                elif folder:
+                    uids = _own_messages(session, folder, wanted)
+                    _delete_own(session, folder, uids)
+                    result[f"{name}_deleted"] = len(uids)
+            except Exception as err:  # noqa: BLE001 - report, never raise during cleanup
+                result["errors"].append(f"{name}: {type(err).__name__}")
+    finally:
+        with contextlib.suppress(Exception):
+            session.logout()
+    expected = {"folders_deleted": 2, "inbox_deleted": 1, "drafts_deleted": 1} if marker else {}
+    result["ok"] = not result["errors"] and all(result[k] >= v for k, v in expected.items())
+    return result
 
 
 def main() -> int:
@@ -254,13 +322,22 @@ def main() -> int:
     parser.add_argument("--cafile", help="CA file (only for local test servers)")
     parser.add_argument("--folder-prefix", default="HA-Live")
     parser.add_argument("--output", help="write the JSON report to this file (UTF-8) instead of standard output")
+    parser.add_argument("--cleanup-only", action="store_true", help="only remove test data left behind by earlier runs, then exit")
     args = parser.parse_args()
     user, password = os.environ.get("GMX_USER"), os.environ.get("GMX_PASS")
     if not user or not password:
         print("GMX_USER and GMX_PASS must be set (use an app password of a test account)", file=sys.stderr)
         return 2
     try:
-        report = run_checks(args, user, password)
+        if args.cleanup_only:
+            c = _load_client()
+            settings = c.imap.ImapSettings(host=args.host, port=args.port, security=c.const.Security.SSL, username=user, password=password)
+            report = {
+                "tool": "gmx_live_check",
+                "cleanup_only": _cleanup(c, settings, _context(args.cafile, c.imap), args.folder_prefix, None),
+            }
+        else:
+            report = run_checks(args, user, password)
     except Exception as err:
         hints = {
             "GmxAuthError": "login rejected: check the address, the (app) password and that POP3/IMAP is enabled in the GMX webmailer",

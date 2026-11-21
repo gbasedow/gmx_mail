@@ -33,6 +33,6 @@ packages = ["custom_components.gmx_mail"]
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]
-# imapclient ships no type information (no py.typed); its use is wrapped by the ImapSession protocol.
-module = ["imapclient", "imapclient.*"]
+# imapclient and aioimaplib ship no type information (no py.typed); they are wrapped by protocols (ImapSession, IdleClient).
+module = ["imapclient", "imapclient.*", "aioimaplib", "aioimaplib.*"]
 ignore_missing_imports = true

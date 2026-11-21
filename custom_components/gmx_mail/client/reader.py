@@ -643,3 +643,94 @@ def get_attachment(session: ImapSession, info: ServerInfo, ref: MailRef, part_id
     if len(content) > max_bytes:
         raise GmxAttachmentTooLargeError("attachment too large")
     return part, content
+
+
+# --------------------------------------------------------------------------- polling (coordinator, M3)
+
+
+@dataclass(slots=True)
+class PollResult:
+    """Counters and newly arrived messages of one poll."""
+
+    unseen_inbox: int
+    inbox_messages: int
+    junk_messages: int | None
+    uidvalidity: int
+    last_uid: int
+    new_messages: list[dict[str, Any]] = field(default_factory=list)
+    skipped_new: int = 0
+    uidvalidity_changed: bool = False
+
+
+def _status(session: ImapSession, folder: str, items: list[str]) -> dict[bytes, Any] | None:
+    try:
+        return session.folder_status(folder, items)
+    except CONNECTION_ERRORS:
+        raise
+    except IMAPClientError:
+        return None
+
+
+def poll(
+    session: ImapSession,
+    info: ServerInfo,
+    *,
+    inbox: str,
+    junk: str | None,
+    last_uid: int | None,
+    known_uidvalidity: int | None,
+    max_events: int,
+    include_headers: bool,
+) -> PollResult:
+    """Read counters with STATUS and find messages newer than ``last_uid`` (blocking).
+
+    * first run (``last_uid`` is None) or a changed UIDVALIDITY only sets the baseline - no events;
+    * at most ``max_events`` of the newest new messages are returned; older ones are only counted.
+    """
+    status = _status(session, inbox, ["MESSAGES", "UNSEEN", "UIDNEXT", "UIDVALIDITY"])
+    if status is None:
+        raise GmxFolderNotFoundError("inbox not found")
+    uidvalidity = int(status.get(b"UIDVALIDITY", 0))
+    uidnext = status.get(b"UIDNEXT")
+    junk_status = _status(session, junk, ["MESSAGES"]) if junk else None
+    result = PollResult(
+        unseen_inbox=int(status.get(b"UNSEEN", 0)),
+        inbox_messages=int(status.get(b"MESSAGES", 0)),
+        junk_messages=int(junk_status.get(b"MESSAGES", 0)) if junk_status is not None else None,
+        uidvalidity=uidvalidity,
+        last_uid=last_uid or 0,
+    )
+    changed = known_uidvalidity is not None and known_uidvalidity != uidvalidity
+    result.uidvalidity_changed = changed
+    baseline = last_uid is None or changed
+    if uidnext is not None:
+        if baseline:
+            result.last_uid = int(uidnext) - 1  # baseline without searching the whole inbox
+            return result
+        if int(uidnext) - 1 <= (last_uid or 0):
+            return result  # nothing new (cheap path: no SELECT)
+
+    with examine(session, info, inbox) as current_validity:
+        uids = sorted(int(u) for u in session.search(["UID", f"{(0 if baseline else last_uid or 0) + 1}:*"]))
+        # "n:*" always matches the highest UID, even if it is below n - filter explicitly.
+        newer = [uid for uid in uids if baseline or uid > (last_uid or 0)]
+        if not newer:
+            if baseline:
+                result.last_uid = 0
+            return result
+        result.last_uid = max(newer)
+        result.uidvalidity = current_validity
+        if baseline:
+            return result
+        announced = newer[-max_events:]
+        result.skipped_new = len(newer) - len(announced)
+        items = ["INTERNALDATE"] + ([SUMMARY_FETCH] if include_headers else [])
+        data = session.fetch(announced, items)
+        for uid in announced:
+            entry: dict[str, Any] = {"ref": MailRef(inbox, uid, current_validity).as_dict()}
+            if include_headers:
+                msg = parse_headers(_find_key(data.get(uid, {}), b"BODY[HEADER"))
+                entry["from"] = ", ".join(_addresses(msg, "from")) or None
+                entry["subject"] = _header_str(msg, "subject", MAX_SUBJECT)
+            result.new_messages.append(entry)
+    return result

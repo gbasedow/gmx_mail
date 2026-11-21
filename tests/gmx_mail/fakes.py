@@ -47,16 +47,20 @@ class FakeImapServer:
     logout_error: BaseException | None = None
     clients: list[FakeIMAPClient] = field(default_factory=list)
     logins: int = 0
-    mailboxes: dict[str, FakeMailbox] = field(default_factory=dict)
+    mailboxes: dict[str, FakeMailbox] = field(default_factory=lambda: {"INBOX": FakeMailbox()})
+    status_error: BaseException | None = None
     # Optional hook: (folder, criteria, charset) -> UIDs; default: all non-deleted messages.
     search_hook: Any = None
     search_error: BaseException | None = None
     broken_partial_fetch: bool = False
     commands: list[tuple[Any, ...]] = field(default_factory=list)
 
-    def mailbox(self, name: str, uidvalidity: int = 1234) -> FakeMailbox:
-        """Return (and create) a mailbox."""
-        return self.mailboxes.setdefault(name, FakeMailbox(uidvalidity=uidvalidity))
+    def mailbox(self, name: str, uidvalidity: int | None = None) -> FakeMailbox:
+        """Return (and create) a mailbox; an explicit ``uidvalidity`` is applied."""
+        box = self.mailboxes.setdefault(name, FakeMailbox())
+        if uidvalidity is not None:
+            box.uidvalidity = uidvalidity
+        return box
 
     def __call__(
         self, host: str, port: int | None = None, ssl: bool = True, ssl_context: Any = None, timeout: Any = None
@@ -169,11 +173,18 @@ class FakeIMAPClient:
     def folder_status(self, folder: str, what: Any = None) -> dict[bytes, Any]:
         """STATUS."""
         self._check_open()
+        if self.server.status_error is not None:
+            raise self.server.status_error
         box = self.server.mailboxes.get(folder)
         if box is None:
             raise IMAPClientError("status failed: NO")
         unseen = sum(1 for m in box.messages.values() if b"\\Seen" not in m.flags)
-        return {b"MESSAGES": len(box.messages), b"UNSEEN": unseen}
+        return {
+            b"MESSAGES": len(box.messages),
+            b"UNSEEN": unseen,
+            b"UIDNEXT": max(box.messages, default=0) + 1,
+            b"UIDVALIDITY": box.uidvalidity,
+        }
 
     def _box(self) -> FakeMailbox:
         assert self.selected is not None, "no folder selected"
@@ -401,3 +412,128 @@ class FakeSMTP:
     def close(self) -> None:
         """Close."""
         self.closed = True
+
+
+# --------------------------------------------------------------------------- aioimaplib fake (IDLE watcher)
+
+
+@dataclass
+class FakeResponse:
+    """aioimaplib Response stand-in."""
+
+    result: str
+    lines: list[bytes] = field(default_factory=list)
+
+
+class FakeIdleClient:
+    """Scriptable stand-in for aioimaplib.IMAP4; pushes are fed through ``push()``."""
+
+    def __init__(self, server: FakeIdleServer, on_lost: Any) -> None:
+        """Initialise."""
+        import asyncio  # noqa: PLC0415
+
+        self.server = server
+        self.on_lost = on_lost
+        self.queue: asyncio.Queue[Any] = asyncio.Queue()
+        self.pending_idle = False
+        self.logged_out = False
+        self.selected: list[str] = []
+        self.state = "NONAUTH"
+        self.idle_starts = 0
+        self.done_calls = 0
+
+    async def wait_hello_from_server(self) -> None:
+        """Greeting."""
+        if self.server.connect_error is not None:
+            raise self.server.connect_error
+
+    async def login(self, user: str, password: str) -> FakeResponse:
+        """LOGIN."""
+        if password != self.server.password:
+            return FakeResponse("NO")
+        self.state = "AUTH"
+        return FakeResponse("OK")
+
+    async def select(self, mailbox: str = "INBOX") -> FakeResponse:
+        """SELECT."""
+        self.selected.append(mailbox)
+        self.state = "SELECTED"
+        return FakeResponse("OK")
+
+    async def examine(self, mailbox: str = "INBOX") -> FakeResponse:
+        """EXAMINE - like aioimaplib 2.0.1 it does NOT enter the SELECTED state."""
+        return FakeResponse("OK")
+
+    def has_capability(self, capability: str) -> bool:
+        """IDLE is offered unless disabled."""
+        return capability != "IDLE" or self.server.idle_capability
+
+    async def idle_start(self, timeout: float = 0) -> Any:
+        """Start IDLE; the renewal timer is simulated by ``renew()``."""
+        import asyncio  # noqa: PLC0415
+
+        from aioimaplib import Abort  # noqa: PLC0415
+
+        if self.state != "SELECTED":  # aioimaplib refuses IDLE outside the SELECTED state
+            raise Abort(f"command IDLE illegal in state {self.state}")
+        self.idle_starts += 1
+        self.pending_idle = True
+        self.server.started.set()
+        future: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
+        future.set_result(FakeResponse("OK"))
+        return future
+
+    async def wait_server_push(self, timeout: float = 0) -> Any:
+        """Wait for the next push."""
+        return await self.queue.get()
+
+    def idle_done(self) -> None:
+        """DONE."""
+        self.done_calls += 1
+        self.pending_idle = False
+
+    def has_pending_idle(self) -> bool:
+        """IDLE active."""
+        return self.pending_idle
+
+    async def logout(self) -> FakeResponse:
+        """LOGOUT."""
+        self.logged_out = True
+        return FakeResponse("OK")
+
+    def push(self, *lines: bytes) -> None:
+        """Simulate untagged responses during IDLE."""
+        self.queue.put_nowait(list(lines))
+
+    def renew(self) -> None:
+        """Simulate the renewal timer (aioimaplib's stop marker)."""
+        from aioimaplib import STOP_WAIT_SERVER_PUSH  # noqa: PLC0415
+
+        self.queue.put_nowait(STOP_WAIT_SERVER_PUSH)
+
+    def lose_connection(self) -> None:
+        """Simulate a dropped socket (aioimaplib calls conn_lost_cb)."""
+        self.on_lost(ConnectionResetError())
+
+
+@dataclass
+class FakeIdleServer:
+    """Factory and shared state for FakeIdleClient."""
+
+    password: str = PASSWORD
+    idle_capability: bool = True
+    connect_error: BaseException | None = None
+    clients: list[FakeIdleClient] = field(default_factory=list)
+    started: Any = None
+
+    def __post_init__(self) -> None:
+        """Create the start event lazily inside the running loop."""
+        import asyncio  # noqa: PLC0415
+
+        self.started = asyncio.Event()
+
+    def __call__(self, settings: Any, context: Any, on_lost: Any) -> FakeIdleClient:
+        """Act as the client factory."""
+        client = FakeIdleClient(self, on_lost)
+        self.clients.append(client)
+        return client

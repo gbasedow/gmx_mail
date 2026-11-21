@@ -72,3 +72,33 @@ class GmxAttachmentTooLargeError(GmxMailError):
 
 class GmxSearchRejectedError(GmxMailError):
     """The server rejected the search criteria (e.g. the UTF-8 charset)."""
+
+
+class GmxUnsupportedError(GmxMailError):
+    """The server lacks what the operation needs (e.g. MOVE and UIDPLUS, keywords)."""
+
+    def __init__(self, reason: str) -> None:
+        """Store a translation-key-like reason."""
+        super().__init__(reason)
+        self.reason = reason
+
+
+class GmxFolderExistsError(GmxMailError):
+    """A folder with this name already exists."""
+
+
+class GmxInvalidFolderNameError(GmxMailError):
+    """The folder name is not allowed (empty, too long, '/', '%', '*', control characters) or source equals target."""
+
+    def __init__(self, reason: str) -> None:
+        """Store a translation-key-like reason."""
+        super().__init__(reason)
+        self.reason = reason
+
+
+class GmxProtectedFolderError(GmxMailError):
+    """Special folders and INBOX cannot be renamed, and get no subfolders."""
+
+
+class GmxMessageTooLargeError(GmxMailError):
+    """The message exceeds the server's APPENDLIMIT."""

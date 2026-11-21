@@ -1,0 +1,19 @@
+# Minimal Home Assistant configuration for the staging test (no default_config: fewer moving parts).
+homeassistant:
+  name: gmx_mail staging
+  time_zone: Europe/Berlin
+  country: DE
+  unit_system: metric
+
+api:
+config:
+diagnostics:
+http:
+onboarding:
+repairs:
+websocket_api:
+
+logger:
+  default: warning
+  logs:
+    custom_components.gmx_mail: debug

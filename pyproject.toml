@@ -9,7 +9,10 @@ pythonpath = [".", "tools", "tests/probe"]
 addopts = "-ra --strict-markers"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-markers = ["integration: needs docker compose (greenmail/dovecot)"]
+markers = [
+    "integration: needs docker compose (greenmail/dovecot)",
+    "staging: needs the Home Assistant staging container (docker compose --profile staging)",
+]
 
 [tool.ruff]
 line-length = 140

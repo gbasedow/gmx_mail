@@ -256,7 +256,6 @@ Die Allowlist ist die einzige harte technische Grenze gegen Datenabfluss; Token 
 - **M4:** Organisieren (Flags, move/copy, Ordner, Spam, Entwürfe) mit Limits und Audit-Log (`gmx_mail_action_executed`, `get_audit_log`).
   Übernommene offene Punkte aus M2/M3 (Nutzerentscheidung 21.11.2026):
   - Freigabe DECISIONS Nr. 32 (Filterregel-Hinweis als ignorierbare Warnung).
-  - Repository-Beschreibung und Topics auf GitHub (Nutzer; HACS-Prüfung bis dahin rot).
   - Live-Prüfungen gegen GMX mit Testkonto (nur manuell, `tools/gmx_probe.py` erweitern): IDLE-Stabilität über Stunden,
     Teil-FETCH-Antworten (`BODY.PEEK[x]<0.n>`), Verhalten von SELECT auf `\Recent`.
   - Aufräumen gespeicherter Anhänge unter `<Medienordner>/gmx_mail/` (bisher M7).

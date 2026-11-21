@@ -32,7 +32,7 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
   Repair-Issue `imap_possibly_disabled`. (M1 enthielt noch keine Aktionen.)
 - Prüfungen: 107 Integrationstests + 29 Probe-Tests grün, Coverage 99 %, ruff, mypy (strict), hassfest (GitHub Action) grün.
   **HACS:** Das Repository ist seit 21.11.2026 öffentlich, die HACS-Action läuft wieder (Job wird nur bei privatem Repo übersprungen, DECISIONS Nr. 17).
-  Lizenz MIT ist eingecheckt; Beschreibung und Topics muss der Nutzer in den GitHub-Einstellungen setzen (DECISIONS Nr. 33). `pytest-homeassistant-custom-component` 0.13.375 bringt HA **2026.10.4** mit – für 2026.11 gibt es noch keine Version.
+  Lizenz MIT, Beschreibung und Topics sind gesetzt; HACS-Action auf `main` grün seit 21.11.2026 (DECISIONS Nr. 33). `pytest-homeassistant-custom-component` 0.13.375 bringt HA **2026.10.4** mit – für 2026.11 gibt es noch keine Version.
 - Entscheidungen aus M1: `docs/DECISIONS.md` Nr. 11–17, alle vom Nutzer freigegeben (Nr. 12: Limits frei wählbar, SPEC-Werte als Voreinstellung). Offen für M6: Stundenlimit für Empfänger (Drittquelle: 11 Empfänger/Stunde, unbestätigt).
 - **M2-Umfang:** Aktionen `list_folders`, `search`, `get_message`, `get_attachment`, `get_status` (`services.py`, nur Stufe R,
   `SupportsResponse.ONLY`); `client/reader.py` (EXAMINE/UNSELECT, `BODY.PEEK`, Indexverzögerungs-Fallback, SORT oder clientseitig),

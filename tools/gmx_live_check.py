@@ -19,7 +19,8 @@ Usage:
     python3 tools/gmx_live_check.py --idle-minutes 2 > live_check.json
     python3 tools/gmx_live_check.py --idle-minutes 35 > live_check_idle.json      # observe BYE + reconnect
 
-Needs: pip install imapclient aioimaplib certifi (no Home Assistant installation required).
+Needs: Python 3.14 (same as Home Assistant 2026.11; the integration code uses 3.14 syntax) and
+``pip install imapclient aioimaplib certifi`` (no Home Assistant installation required).
 """
 
 from __future__ import annotations
@@ -243,6 +244,9 @@ def _cleanup(session: Any, c: Any, folder_map: Any, test_folder: str, drafts: li
 
 def main() -> int:
     """Entry point."""
+    if sys.version_info < (3, 14):  # noqa: UP036 - the tool runs outside HA, often on an older Python
+        print(f"Python 3.14 or newer is required (found {sys.version.split()[0]}); the integration code uses 3.14 syntax", file=sys.stderr)
+        return 2
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--idle-minutes", type=float, default=2.0, help="how long to keep IDLE open (35 to observe GMX's BYE)")
     parser.add_argument("--host", default="imap.gmx.net")
@@ -254,7 +258,19 @@ def main() -> int:
     if not user or not password:
         print("GMX_USER and GMX_PASS must be set (use an app password of a test account)", file=sys.stderr)
         return 2
-    print(json.dumps(run_checks(args, user, password), indent=2, default=str))
+    try:
+        report = run_checks(args, user, password)
+    except Exception as err:
+        hints = {
+            "GmxAuthError": "login rejected: check the address, the (app) password and that POP3/IMAP is enabled in the GMX webmailer",
+            "GmxTlsError": "TLS handshake failed (certificate or TLS version)",
+            "GmxConnectionError": "server not reachable (host, port, firewall or network)",
+        }
+        if type(err).__name__ not in hints:
+            raise  # unexpected: keep the traceback (it contains no credentials)
+        print(f"{type(err).__name__}: {hints[type(err).__name__]}", file=sys.stderr)
+        return 1
+    print(json.dumps(report, indent=2, default=str))
     return 0
 
 

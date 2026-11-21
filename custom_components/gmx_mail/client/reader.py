@@ -462,7 +462,7 @@ def _summaries(session: ImapSession, ref_folder: str, uidvalidity: int, uids: Se
             "subject": _header_str(msg, "subject", MAX_SUBJECT),
             "size": int(item.get(b"RFC822.SIZE", 0)),
             "flags": flags,
-            "has_attachments": any(not p.inline for p in attachments(parts)),
+            "has_attachments": any(not p.embedded for p in attachments(parts)),
         }
         if len(to) > MAX_TO:
             entry["to_more"] = len(to) - MAX_TO

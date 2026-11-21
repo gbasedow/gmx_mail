@@ -39,6 +39,15 @@ def test_inline_image_is_listed_as_inline() -> None:
     """Embedded images are attachments marked inline (they do not count as 'has_attachments')."""
     (image,) = attachments(parse_bodystructure(RELATED_INLINE_IMAGE))
     assert image.mime == "image/png" and image.inline and image.content_id == "img1@x"
+    assert image.embedded
+
+
+def test_inline_pdf_still_counts_as_attachment() -> None:
+    """GMX system mails mark PDFs as inline; they are files, not embedded images (found live on 21.11.2026)."""
+    from custom_components.gmx_mail.client.structure import PartInfo  # noqa: PLC0415
+
+    pdf = PartInfo("1.2", "application/pdf", 367088, "base64", None, "AGB.pdf", "inline", None)
+    assert pdf.is_attachment and pdf.inline and not pdf.embedded
 
 
 def test_forwarded_message_is_one_attachment() -> None:

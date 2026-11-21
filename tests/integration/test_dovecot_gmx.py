@@ -279,6 +279,79 @@ def test_move_copy_flags_and_fallback(mailer: IMAPClient, folder: str) -> None:
             mailer.delete_folder(f"{folder}/Ziel ä")
 
 
+def _subjects(client: IMAPClient, folder: str) -> dict[int, str]:
+    client.select_folder(folder, readonly=True)
+    uids = client.search(["ALL"])
+    data = client.fetch(uids, ["BODY.PEEK[HEADER.FIELDS (SUBJECT)]"]) if uids else {}
+    client.unselect_folder()
+    return {uid: item[b"BODY[HEADER.FIELDS (SUBJECT)]"].decode().strip().removeprefix("Subject: ") for uid, item in data.items()}
+
+
+def test_trash_delete_permanently_and_delete_folder(mailer: IMAPClient, folder: str) -> None:
+    """M5 against the GMX-like server: trash, permanent deletion of exactly these UIDs (a foreign \\Deleted message
+    in the trash survives), and the folder rules."""
+    from custom_components.gmx_mail.client.deleter import (  # noqa: PLC0415
+        check_delete_folder,
+        delete_folder,
+        delete_permanently,
+        preview_permanent,
+        trash,
+    )
+    from custom_components.gmx_mail.client.errors import GmxDeleteRuleError, GmxProtectedFolderError  # noqa: PLC0415
+    from custom_components.gmx_mail.client.writer import create_folder  # noqa: PLC0415
+
+    marker = uuid.uuid4().hex[:8]
+    info = check_imap_account(SETTINGS, _context())
+    folder_map = map_special_folders(info.folders)
+    session = open_imap_connection(SETTINGS, _context())
+    try:
+        for subject in (f"weg-1-{marker}", f"weg-2-{marker}"):
+            _deliver(mailer, folder, subject)
+        _deliver(mailer, "Gelöscht", f"fremd-{marker}", flags=(b"\\Deleted",))  # marked by another client
+        mailer.select_folder(folder, readonly=True)
+        validity = mailer.folder_status(folder, ["UIDVALIDITY"])[b"UIDVALIDITY"]
+        refs = [MailRef(folder, uid, validity) for uid in sorted(mailer.search(["ALL"]))]
+        mailer.unselect_folder()
+
+        target, moved = trash(session, info, folder_map, refs)
+        assert target == "Gelöscht" and moved.count == 2 and None not in moved.new_refs
+        in_trash = [MailRef(**r) for r in moved.new_refs if r]
+        with pytest.raises(GmxDeleteRuleError):
+            trash(session, info, folder_map, in_trash)
+
+        preview = preview_permanent(session, info, folder_map, in_trash)
+        assert preview["count"] == 2 and {m["subject"] for m in preview["messages"]} == {f"weg-1-{marker}", f"weg-2-{marker}"}
+        result = delete_permanently(session, info, folder_map, in_trash)
+        assert result.count == 2 and result.warnings == []
+        left = {subject for subject in _subjects(mailer, "Gelöscht").values() if marker in subject}
+        assert left == {f"fremd-{marker}"}  # only our two are gone
+
+        child = create_folder(session, info, folder_map, "Unter ü", folder)
+        with pytest.raises(GmxDeleteRuleError, match="folder_has_children"):
+            check_delete_folder(session, folder_map, folder)
+        _deliver(mailer, child, "drin")
+        with pytest.raises(GmxDeleteRuleError, match="folder_not_empty"):
+            delete_folder(session, folder_map, child)
+        mailer.select_folder(child)
+        mailer.add_flags(mailer.search(["ALL"]), [b"\\Deleted"])
+        mailer.uid_expunge(mailer.search(["DELETED"]))
+        mailer.unselect_folder()
+        assert delete_folder(session, folder_map, child) == child
+        for protected in ("INBOX", "Gelöscht", "Spamverdacht"):
+            with pytest.raises(GmxProtectedFolderError):
+                check_delete_folder(session, folder_map, protected)
+    finally:
+        session.logout()
+        own = [uid for uid, subject in _subjects(mailer, "Gelöscht").items() if marker in subject]
+        if own:
+            mailer.select_folder("Gelöscht")
+            mailer.add_flags(own, [b"\\Deleted"])
+            mailer.uid_expunge(own)
+            mailer.unselect_folder()
+        with contextlib.suppress(Exception):
+            mailer.delete_folder(f"{folder}/Unter ü")
+
+
 def test_draft_lands_in_entwuerfe(mailer: IMAPClient) -> None:
     """save_draft appends to Entwürfe with \\Draft and \\Seen and returns the reference (APPENDUID)."""
     from custom_components.gmx_mail.client.writer import DraftInput, save_draft  # noqa: PLC0415
@@ -417,8 +490,16 @@ def test_live_check_tool_survives_a_dropped_connection() -> None:
     assert report["copy"]["new_refs_known"] and report["move"]["via_copyuid"]
     assert report["draft"] == {"ref_known": True, "size": report["draft"]["size"], "folder_role_ok": True}
     assert report["idle"]["connected"] and report["idle"]["push_delay_s"] is not None
+    assert report["delete"] == {"trashed": 1, "trash_ref_known": True, "preview_count": 1, "deleted": 1, "warnings": [], "gone": True}
     assert report["idle"]["reconnects"] >= 1  # the kick was noticed and the watcher reconnected
-    assert report["cleanup"] == {"ok": True, "errors": [], "folders_deleted": 2, "inbox_deleted": 1, "drafts_deleted": 1}
+    assert report["cleanup"] == {
+        "ok": True,
+        "errors": [],
+        "folders_deleted": 2,
+        "inbox_deleted": 1,
+        "trash_deleted": 0,
+        "drafts_deleted": 1,
+    }
     _no_live_check_leftovers()
 
 
@@ -436,7 +517,7 @@ def test_live_check_cleanup_only_removes_just_its_own_leftovers(mailer: IMAPClie
     mailer.append("Entwürfe", message("<keep-draft@gmx.test>", "gmx_mail live check draft"))  # not flagged \Draft
     try:
         report = _live_check("--cleanup-only")["cleanup_only"]
-        assert report == {"ok": True, "errors": [], "folders_deleted": 2, "inbox_deleted": 1, "drafts_deleted": 1}
+        assert report == {"ok": True, "errors": [], "folders_deleted": 2, "inbox_deleted": 1, "trash_deleted": 0, "drafts_deleted": 1}
         for folder, kept in (("INBOX", b"keep-inbox@example.org"), ("Entwürfe", b"keep-draft@gmx.test")):
             mailer.select_folder(folder, readonly=True)
             found = mailer.fetch(mailer.search(["ALL"]), ["BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)]"])

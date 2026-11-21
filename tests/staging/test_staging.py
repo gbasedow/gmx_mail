@@ -28,7 +28,7 @@ import aiohttp
 import pytest
 from imapclient import IMAPClient
 
-from custom_components.gmx_mail.const import DEFAULT_OPTIONS
+from custom_components.gmx_mail.const import CONF_ALLOW_PERMANENT_DELETE, CONF_PERMISSIONS, DEFAULT_OPTIONS
 from custom_components.gmx_mail.options import nest
 
 pytestmark = pytest.mark.staging
@@ -227,20 +227,7 @@ async def test_end_to_end(staging: Staging) -> None:
     assert int(counter["state"]) == 4  # get_status, list_folders, search, get_message
 
     # 8. M4: enable the "organize" level through the options flow (as a person would in the UI)
-    options = nest({**DEFAULT_OPTIONS, "permissions": ["read", "organize"]})
-    flow = await staging.rest("POST", "/api/config/config_entries/options/flow", {"handler": entry_id})
-    result = await staging.rest("POST", f"/api/config/config_entries/options/flow/{flow['flow_id']}", options)
-    assert result["type"] == "create_entry", result
-    status: dict[str, Any] = {}
-    for _ in range(30):  # the entry reloads after the options change ("not loaded" for a moment)
-        try:
-            status = await staging.call("get_status", entry_id)
-        except AssertionError:
-            status = {}
-        if "organize" in status.get("data", {}).get("permissions", []):
-            break
-        await asyncio.sleep(1)
-    assert "organize" in status["data"]["permissions"]
+    await _set_options(staging, entry_id, {**DEFAULT_OPTIONS, CONF_PERMISSIONS: ["read", "organize"]}, "organize")
 
     # 9. Organise: flag, create folder, move (new reference), draft; audit log without content
     flagged = await staging.call("set_flags", entry_id, refs=[event["ref"]], add=["flagged", "$Staging"])
@@ -256,3 +243,51 @@ async def test_end_to_end(staging: Staging) -> None:
     audit = await staging.call("get_audit_log", entry_id)
     assert [e["action"] for e in audit["data"]["entries"]] == ["save_draft", "move", "create_folder", "set_flags"]
     assert "anna@example.org" not in json.dumps(audit)
+
+    # 10. M5: enable "delete" and permanent deletion; trash, two-step permanent deletion, folder deletion
+    options = {**DEFAULT_OPTIONS, CONF_PERMISSIONS: ["read", "organize", "delete"], CONF_ALLOW_PERMANENT_DELETE: True}
+    await _set_options(staging, entry_id, options, "delete")
+    trashed = await staging.call("trash", entry_id, refs=[new_ref])
+    in_trash = trashed["data"]["new_refs"][0]
+    assert trashed["data"]["trash_folder"] == "Gelöscht" and in_trash["folder"] == "Gelöscht"
+    preview = await staging.call("delete_permanently", entry_id, refs=[in_trash])
+    assert preview["data"]["preview"]["count"] == 1 and preview["data"]["preview"]["messages"][0]["subject"] == "Staging-Rechnung"
+    code = preview["data"]["confirm_token"]
+    done = await staging.call("delete_permanently", entry_id, refs=[in_trash], confirm_token=code)
+    assert done["data"]["deleted"] == 1
+    try:
+        await staging.call("delete_permanently", entry_id, refs=[in_trash], confirm_token=code)
+        raise AssertionError("a confirmation code must work only once")
+    except AssertionError as err:
+        assert "400" in str(err), err
+    folder_preview = await staging.call("delete_folder", entry_id, path="Staging-Ablage")
+    gone = await staging.call("delete_folder", entry_id, path="Staging-Ablage", confirm_token=folder_preview["data"]["confirm_token"])
+    assert gone["data"]["deleted_folder"] == "Staging-Ablage"
+    status = await staging.call("get_status", entry_id)
+    assert status["data"]["limits_used"]["deleted_today"] == 2  # trash + permanent deletion both count
+    audit = await staging.call("get_audit_log", entry_id, limit=6)
+    assert [(e["action"], e["outcome"]) for e in audit["data"]["entries"]] == [
+        ("delete_folder", "ok"),
+        ("delete_folder", "preview"),
+        ("delete_permanently", "rejected"),
+        ("delete_permanently", "ok"),
+        ("delete_permanently", "preview"),
+        ("trash", "ok"),
+    ]
+
+
+async def _set_options(staging: Staging, entry_id: str, options: dict[str, Any], expected_level: str) -> None:
+    """Change the options through the options flow (as a person would in the UI) and wait for the reload."""
+    flow = await staging.rest("POST", "/api/config/config_entries/options/flow", {"handler": entry_id})
+    result = await staging.rest("POST", f"/api/config/config_entries/options/flow/{flow['flow_id']}", nest(options))
+    assert result["type"] == "create_entry", result
+    status: dict[str, Any] = {}
+    for _ in range(30):  # the entry reloads after the options change ("not loaded" for a moment)
+        try:
+            status = await staging.call("get_status", entry_id)
+        except AssertionError:
+            status = {}
+        if expected_level in status.get("data", {}).get("permissions", []):
+            return
+        await asyncio.sleep(1)
+    raise AssertionError(f"level {expected_level} not active after the options change")

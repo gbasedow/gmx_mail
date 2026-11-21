@@ -1,4 +1,4 @@
-"""Per-day action counter (diagnostic sensor "actions today"; later the base for the daily limits, M4-M6)."""
+"""Per-day counters: actions by level (diagnostic sensor "actions today") and deleted messages (daily limit, M5)."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ class ActionCounter:
         self._store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry_id}.actions")
         self._date = self._today()
         self._counts: dict[str, int] = {}
+        self._deleted = 0
         self._listeners: list[Callable[[], None]] = []
 
     @staticmethod
@@ -35,11 +36,12 @@ class ActionCounter:
         stored = await self._store.async_load()
         if stored and stored.get("date") == self._date and isinstance(stored.get("counts"), dict):
             self._counts = {str(k): int(v) for k, v in stored["counts"].items()}
+            self._deleted = int(stored.get("deleted", 0))
 
     def _roll(self) -> None:
         today = self._today()
         if today != self._date:
-            self._date, self._counts = today, {}
+            self._date, self._counts, self._deleted = today, {}, 0
 
     @property
     def counts(self) -> dict[str, int]:
@@ -57,8 +59,33 @@ class ActionCounter:
         """Count one executed action."""
         self._roll()
         self._counts[level] = self._counts.get(level, 0) + 1
-        self._store.async_delay_save(lambda: {"date": self._date, "counts": dict(self._counts)}, SAVE_DELAY_S)
+        self._save()
         self.async_notify()
+
+    def _data(self) -> dict[str, Any]:
+        return {"date": self._date, "counts": dict(self._counts), "deleted": self._deleted}
+
+    def _save(self) -> None:
+        self._store.async_delay_save(self._data, SAVE_DELAY_S)
+
+    async def async_flush(self) -> None:
+        """Write pending counts now (unload/reload): the daily delete limit must not be reset by a reload."""
+        await self._store.async_save(self._data())
+
+    @property
+    def deleted_today(self) -> int:
+        """Return how many messages were moved to the trash or deleted for good today."""
+        self._roll()
+        return self._deleted
+
+    @callback
+    def add_deleted(self, count: int) -> None:
+        """Count deleted messages towards the daily limit (trash and permanent deletion both count)."""
+        if count <= 0:
+            return
+        self._roll()
+        self._deleted += count
+        self._save()
 
     @callback
     def async_notify(self) -> None:

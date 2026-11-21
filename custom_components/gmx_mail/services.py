@@ -1,4 +1,4 @@
-"""Home Assistant actions of GMX Mail: reading (M2, level R) and organising (M4, level O).
+"""Home Assistant actions of GMX Mail: reading (M2, level R), organising (M4, level O) and deleting (M5, level D).
 
 All actions take ``config_entry_id`` in the service data (ha-mcp's ``ha_call_service`` has no ``target``).
 Errors are raised as ``ServiceValidationError``/``HomeAssistantError`` with a translation key, never returned
@@ -26,11 +26,13 @@ from homeassistant.helpers import service
 from imapclient.exceptions import IMAPClientError
 
 from .attachments import attachment_dir
+from .client.deleter import check_delete_folder, delete_folder, delete_permanently, preview_permanent, trash
 from .client.errors import (
     GmxAttachmentTooLargeError,
     GmxAuthError,
     GmxConnectionError,
     GmxConnectionLimitError,
+    GmxDeleteRuleError,
     GmxFolderExistsError,
     GmxFolderNotFoundError,
     GmxInvalidFolderNameError,
@@ -57,8 +59,10 @@ from .client.writer import (
     save_draft,
     set_flags,
 )
+from .confirm import InvalidTokenError
 from .const import (
     CONF_ALLOW_HTML_OUTPUT,
+    CONF_ALLOW_PERMANENT_DELETE,
     CONF_ALLOWLIST,
     CONF_EMAIL,
     CONF_MAX_DELETE_PER_DAY,
@@ -67,6 +71,7 @@ from .const import (
     CONF_PERMISSIONS,
     CONF_SEND_MODE,
     DOMAIN,
+    MAX_DELETE_PER_CALL,
     MAX_REFS_PER_CALL,
     FolderRole,
     Permission,
@@ -92,6 +97,9 @@ SERVICE_MARK_NOT_SPAM = "mark_not_spam"
 SERVICE_CREATE_FOLDER = "create_folder"
 SERVICE_RENAME_FOLDER = "rename_folder"
 SERVICE_SAVE_DRAFT = "save_draft"
+SERVICE_TRASH = "trash"
+SERVICE_DELETE_PERMANENTLY = "delete_permanently"
+SERVICE_DELETE_FOLDER = "delete_folder"
 MAX_DRAFT_TEXT = 1_000_000
 
 MAX_TEXT_CRITERION = 200
@@ -169,6 +177,8 @@ GET_STATUS_SCHEMA = vol.Schema(_ENTRY)
 
 # --------------------------------------------------------------------------- helpers
 
+type _Handler = Callable[[HomeAssistant, ServiceCall], Coroutine[Any, Any, ServiceResponse]]
+
 
 def _entry(hass: HomeAssistant, call: ServiceCall, permission: Permission) -> ConfigEntry:
     entry = service.async_get_config_entry(hass, DOMAIN, call.data[ATTR_CONFIG_ENTRY_ID])
@@ -200,7 +210,7 @@ _ERROR_KEYS: tuple[tuple[type[Exception], str, bool], ...] = (
 
 def _translate(err: Exception, folder: str | None = None) -> HomeAssistantError:
     """Map client errors to Home Assistant errors with translation keys (never error fields in responses)."""
-    if isinstance(err, GmxUnsupportedError | GmxInvalidFolderNameError):
+    if isinstance(err, GmxUnsupportedError | GmxInvalidFolderNameError | GmxDeleteRuleError):
         return ServiceValidationError(translation_domain=DOMAIN, translation_key=err.reason)
     for error_type, key, validation in _ERROR_KEYS:
         if isinstance(err, error_type):
@@ -212,13 +222,15 @@ def _translate(err: Exception, folder: str | None = None) -> HomeAssistantError:
     return HomeAssistantError(translation_domain=DOMAIN, translation_key="imap_error")
 
 
-async def _run[T](entry: ConfigEntry, func: Callable[[ImapSession], T], *, folder: str | None = None) -> T:
-    """Run a read operation on the work connection (repeated once after a connection loss)."""
+async def _run[T](
+    entry: ConfigEntry, func: Callable[[ImapSession], T], *, folder: str | None = None, level: Permission = Permission.READ
+) -> T:
+    """Run a read-only operation on the work connection (repeated once after a connection loss)."""
     try:
         result: T = await entry.runtime_data.worker.async_run(func, readonly=True)
     except (GmxMailError, IMAPClientError) as err:
         raise _translate(err, folder) from err
-    entry.runtime_data.counter.increment(Permission.READ.value)
+    entry.runtime_data.counter.increment(level.value)
     return result
 
 
@@ -434,7 +446,7 @@ async def _get_status(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse
         "idle_active": data.push_state is PushState.CONNECTED,
         "push_state": data.push_state.value,
         "last_sync": data.coordinator.data.last_sync.isoformat() if data.coordinator.data else None,
-        "limits_used": {"actions_today": data.counter.counts},
+        "limits_used": {"actions_today": data.counter.counts, "deleted_today": data.counter.deleted_today},
         "permissions": options.get(CONF_PERMISSIONS, []),
         "send_mode": options.get(CONF_SEND_MODE),
         "allowlist_entries": len(options.get(CONF_ALLOWLIST, [])),
@@ -625,9 +637,165 @@ async def _get_audit_log(hass: HomeAssistant, call: ServiceCall) -> ServiceRespo
     return envelope
 
 
-# --------------------------------------------------------------------------- registration
+# --------------------------------------------------------------------------- deleting (M5, level D)
 
-type _Handler = Callable[[HomeAssistant, ServiceCall], Coroutine[Any, Any, ServiceResponse]]
+_DELETE_REFS = vol.All(cv.ensure_list, vol.Length(min=1, max=MAX_DELETE_PER_CALL), [REF_SCHEMA])
+_TOKEN = vol.All(cv.string, vol.Length(min=1, max=512))
+TRASH_SCHEMA = vol.Schema({**_ENTRY, vol.Required("refs"): _DELETE_REFS})
+DELETE_PERMANENTLY_SCHEMA = vol.Schema({**_ENTRY, vol.Required("refs"): _DELETE_REFS, vol.Optional("confirm_token"): _TOKEN})
+DELETE_FOLDER_SCHEMA = vol.Schema({**_ENTRY, vol.Required("path"): _FOLDER, vol.Optional("confirm_token"): _TOKEN})
+
+
+def _audited_delete(action: str) -> Callable[[_Handler], _Handler]:
+    """Record refused deleting calls in the audit log too (who tried what is worth knowing); content-free."""
+
+    def wrap(handler: _Handler) -> _Handler:
+        async def inner(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
+            try:
+                return await handler(hass, call)
+            except ServiceValidationError as err:
+                entry = hass.config_entries.async_get_entry(str(call.data.get(ATTR_CONFIG_ENTRY_ID, "")))
+                runtime = getattr(entry, "runtime_data", None) if entry is not None and entry.domain == DOMAIN else None
+                if runtime is not None and hasattr(runtime, "audit"):
+                    params = {k: v for k, v in call.data.items() if k not in (ATTR_CONFIG_ENTRY_ID, "confirm_token")}
+                    runtime.audit.record(
+                        action=action, level=Permission.DELETE.value, outcome="rejected", params=params, error=err.translation_key
+                    )
+                raise
+
+        return inner
+
+    return wrap
+
+
+def _sorted_refs(refs: list[MailRef]) -> list[dict[str, Any]]:
+    """Canonical order: a confirmation code is bound to the set of messages, not to their order."""
+    return sorted((r.as_dict() for r in refs), key=lambda d: (d["folder"], d["uid"]))
+
+
+def _check_delete_limit(entry: ConfigEntry, count: int) -> None:
+    data = entry.runtime_data
+    limit = int(data.options.get(CONF_MAX_DELETE_PER_DAY, 0))
+    used = data.counter.deleted_today
+    if used + count > limit:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="daily_delete_limit",
+            translation_placeholders={"limit": str(limit), "remaining": str(max(0, limit - used))},
+        )
+
+
+def _consume(entry: ConfigEntry, token: str, action: str, params: Any) -> None:
+    try:
+        entry.runtime_data.tokens.consume(token, action, params)
+    except InvalidTokenError as err:
+        raise ServiceValidationError(translation_domain=DOMAIN, translation_key="confirm_token_invalid") from err
+
+
+@_audited_delete(SERVICE_TRASH)
+async def _trash(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
+    entry = _entry(hass, call, Permission.DELETE)
+    data = entry.runtime_data
+    refs = _refs(call)
+    _check_delete_limit(entry, len(refs))
+    params = {"refs": _sorted_refs(refs)}
+    target_name = data.folder_map.get(FolderRole.TRASH)
+    target, result = await _write(
+        entry,
+        lambda s: trash(s, data.server_info, data.folder_map, refs),
+        action=SERVICE_TRASH,
+        params=params,
+        folder=target_name,
+        target=target_name,
+        level=Permission.DELETE,
+    )
+    data.counter.add_deleted(result.count)
+    data.audit.record(
+        action=SERVICE_TRASH,
+        level=Permission.DELETE.value,
+        outcome="ok",
+        count=result.count,
+        folders=result.folders,
+        target=target,
+        params=params,
+    )
+    body = {"trashed": result.count, "trash_folder": target, "new_refs": result.new_refs, "missing": result.missing}
+    return _write_envelope(entry, SERVICE_TRASH, body, result.warnings)
+
+
+@_audited_delete(SERVICE_DELETE_PERMANENTLY)
+async def _delete_permanently(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
+    entry = _entry(hass, call, Permission.DELETE)
+    data = entry.runtime_data
+    if not data.options.get(CONF_ALLOW_PERMANENT_DELETE):
+        raise ServiceValidationError(translation_domain=DOMAIN, translation_key="permanent_delete_disabled")
+    refs = _refs(call)
+    _check_delete_limit(entry, len(refs))
+    params = {"refs": _sorted_refs(refs)}
+    token = call.data.get("confirm_token")
+    if not token:
+        # Step 1: nothing is deleted; the preview and a code for exactly these messages are returned.
+        preview = await _run(entry, lambda s: preview_permanent(s, data.server_info, data.folder_map, refs), level=Permission.DELETE)
+        data.audit.record(
+            action=SERVICE_DELETE_PERMANENTLY,
+            level=Permission.DELETE.value,
+            outcome="preview",
+            count=preview["count"],
+            folders=preview["folders"],
+            params=params,
+        )
+        body: dict[str, Any] = {"preview": preview}
+        if preview["count"]:
+            body |= {"confirm_token": data.tokens.issue(SERVICE_DELETE_PERMANENTLY, params), "expires_in": data.tokens.ttl}
+        envelope = build_envelope(account=entry.title, action=SERVICE_DELETE_PERMANENTLY, data=body)
+        return envelope
+    _consume(entry, token, SERVICE_DELETE_PERMANENTLY, params)
+    result = await _write(
+        entry,
+        lambda s: delete_permanently(s, data.server_info, data.folder_map, refs),
+        action=SERVICE_DELETE_PERMANENTLY,
+        params=params,
+        level=Permission.DELETE,
+    )
+    data.counter.add_deleted(result.count)
+    data.audit.record(
+        action=SERVICE_DELETE_PERMANENTLY,
+        level=Permission.DELETE.value,
+        outcome="ok",
+        count=result.count,
+        folders=result.folders,
+        params=params,
+    )
+    return _write_envelope(entry, SERVICE_DELETE_PERMANENTLY, {"deleted": result.count, "missing": result.missing}, result.warnings)
+
+
+@_audited_delete(SERVICE_DELETE_FOLDER)
+async def _delete_folder(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
+    entry = _entry(hass, call, Permission.DELETE)
+    data = entry.runtime_data
+    path: str = call.data["path"]
+    params = {"path": path}
+    token = call.data.get("confirm_token")
+    if not token:
+        preview = await _run(entry, lambda s: check_delete_folder(s, data.folder_map, path), folder=path, level=Permission.DELETE)
+        data.audit.record(action=SERVICE_DELETE_FOLDER, level=Permission.DELETE.value, outcome="preview", folders=[path], params=params)
+        body = {"preview": preview, "confirm_token": data.tokens.issue(SERVICE_DELETE_FOLDER, params), "expires_in": data.tokens.ttl}
+        return build_envelope(account=entry.title, action=SERVICE_DELETE_FOLDER, data=body)
+    _consume(entry, token, SERVICE_DELETE_FOLDER, params)
+    deleted = await _write(
+        entry,
+        lambda s: delete_folder(s, data.folder_map, path),
+        action=SERVICE_DELETE_FOLDER,
+        params=params,
+        folder=path,
+        target=path,
+        level=Permission.DELETE,
+    )
+    data.audit.record(action=SERVICE_DELETE_FOLDER, level=Permission.DELETE.value, outcome="ok", count=1, folders=[path], params=params)
+    return _write_envelope(entry, SERVICE_DELETE_FOLDER, {"deleted_folder": deleted})
+
+
+# --------------------------------------------------------------------------- registration
 
 _READ_HANDLERS: dict[str, tuple[_Handler, vol.Schema]] = {
     SERVICE_LIST_FOLDERS: (_list_folders, LIST_FOLDERS_SCHEMA),
@@ -646,6 +814,9 @@ _WRITE_HANDLERS: dict[str, tuple[_Handler, vol.Schema]] = {
     SERVICE_CREATE_FOLDER: (_create_folder, CREATE_FOLDER_SCHEMA),
     SERVICE_RENAME_FOLDER: (_rename_folder, RENAME_FOLDER_SCHEMA),
     SERVICE_SAVE_DRAFT: (_save_draft, SAVE_DRAFT_SCHEMA),
+    SERVICE_TRASH: (_trash, TRASH_SCHEMA),
+    SERVICE_DELETE_PERMANENTLY: (_delete_permanently, DELETE_PERMANENTLY_SCHEMA),
+    SERVICE_DELETE_FOLDER: (_delete_folder, DELETE_FOLDER_SCHEMA),
 }
 
 

@@ -7,6 +7,7 @@ Answers the open M4 questions (SPEC section 7) with the code that Home Assistant
   * partial FETCH (``BODY.PEEK[1]<0.n>``): parsed directly or only via the fallback (GreenMail breaks it);
   * MOVE/COPY: new references from COPYUID or only via the Message-ID fallback;
   * draft APPEND to Entwürfe with APPENDUID;
+  * deleting (M5): one own test message to the trash, preview, permanent deletion there, then verify it is gone;
   * IDLE: notification for a new message and - with ``--idle-minutes 35`` - GMX's ``* BYE timeout`` and the reconnect.
 
 Safety rules (same as tools/gmx_probe.py):
@@ -56,7 +57,7 @@ def _load_client() -> types.SimpleNamespace:
             module.__path__ = [str(path)]
             sys.modules[name] = module
     names = ("const", "client", "client.errors", "client.folders", "client.sanitize", "client.structure", "client.imap")
-    names += ("client.reader", "client.writer", "client.idle")
+    names += ("client.reader", "client.writer", "client.deleter", "client.idle")
     loaded = {}
     for short in names:
         full = f"custom_components.gmx_mail.{short}"
@@ -157,6 +158,7 @@ def _work_checks(
     }
     flags = c.writer.set_flags(session, info, refs[2:3], ["flagged", "$GmxMailLiveCheck"], [])
     report["set_flags"] = {"count": flags.count}
+    report["delete"] = _delete_check(c, session, info, folder_map, refs[2])
 
     draft = c.writer.DraftInput(sender=user, to=[user], subject=f"{DRAFT_SUBJECT} {marker}", body_text="Entwurf (Live-Check)")
     ref, size = c.writer.save_draft(session, info, folder_map, draft)
@@ -165,6 +167,22 @@ def _work_checks(
         "size": size,
         "folder_role_ok": bool(ref and ref["folder"] == folder_map.get(c.const.FolderRole.DRAFTS)),
     }
+
+
+def _delete_check(c: Any, session: Any, info: Any, folder_map: Any, ref: Any) -> dict[str, Any]:
+    """M5 path with one own test message: trash, preview, permanent deletion in the trash, then check it is gone."""
+    trash_folder, moved = c.deleter.trash(session, info, folder_map, [ref])
+    result: dict[str, Any] = {"trashed": moved.count, "trash_ref_known": bool(moved.new_refs and moved.new_refs[0])}
+    if not result["trash_ref_known"]:
+        return result  # the clean-up finds the message in the trash by its Message-ID
+    in_trash = c.reader.MailRef(**moved.new_refs[0])
+    preview = c.deleter.preview_permanent(session, info, folder_map, [in_trash])
+    deleted = c.deleter.delete_permanently(session, info, folder_map, [in_trash])
+    session.select_folder(trash_folder, readonly=True)
+    still_there = in_trash.uid in session.fetch([in_trash.uid], ["FLAGS"])
+    session.unselect_folder()
+    result |= {"preview_count": preview["count"], "deleted": deleted.count, "warnings": deleted.warnings, "gone": not still_there}
+    return result
 
 
 def _recent_check(c: Any, settings: Any, context: ssl.SSLContext, session: Any, folder: str) -> dict[str, Any]:
@@ -264,7 +282,7 @@ def _cleanup(c: Any, settings: Any, context: ssl.SSLContext, prefix: str, marker
     Only data the tool itself creates is matched: folders ``<prefix>-…``, INBOX messages with the Message-ID
     ``<…@gmx-mail-live-check>`` and drafts flagged ``\\Draft`` whose subject starts with the draft subject.
     """
-    result: dict[str, Any] = {"ok": False, "errors": [], "folders_deleted": 0, "inbox_deleted": 0, "drafts_deleted": 0}
+    result: dict[str, Any] = {"ok": False, "errors": [], "folders_deleted": 0, "inbox_deleted": 0, "trash_deleted": 0, "drafts_deleted": 0}
     tag = f"{prefix}-{marker}" if marker else f"{prefix}-"
     try:
         session = c.imap.open_imap_connection(settings, context)
@@ -273,14 +291,16 @@ def _cleanup(c: Any, settings: Any, context: ssl.SSLContext, prefix: str, marker
         return result
     try:
         info = c.imap.probe_server(session)
-        drafts_folder = c.folders.map_special_folders(info.folders).get(c.const.FolderRole.DRAFTS)
+        roles = c.folders.map_special_folders(info.folders)
+        drafts_folder = roles.get(c.const.FolderRole.DRAFTS)
+
+        def own_message_id(mid: str, _subject: str, _flags: set[str]) -> bool:
+            return mid.endswith(MESSAGE_ID_DOMAIN + ">") and (marker is None or f"<{marker}-" in mid)
+
         steps = (
             ("folders", None, None),
-            (
-                "inbox",
-                "INBOX",
-                lambda mid, _subject, _flags: mid.endswith(MESSAGE_ID_DOMAIN + ">") and (marker is None or f"<{marker}-" in mid),
-            ),
+            ("inbox", "INBOX", own_message_id),
+            ("trash", roles.get(c.const.FolderRole.TRASH), own_message_id),  # left there if the delete check was cut short
             (
                 "drafts",
                 drafts_folder,

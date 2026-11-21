@@ -41,6 +41,15 @@
     },
     "save_draft": {
       "service": "mdi:email-edit-outline"
+    },
+    "trash": {
+      "service": "mdi:delete-outline"
+    },
+    "delete_permanently": {
+      "service": "mdi:delete-forever-outline"
+    },
+    "delete_folder": {
+      "service": "mdi:folder-remove-outline"
     }
   },
   "entity": {

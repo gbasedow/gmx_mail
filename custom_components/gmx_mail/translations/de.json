@@ -75,8 +75,8 @@
               "allow_html_output": "HTML-Ausgabe erlauben"
             },
             "data_description": {
-              "permissions": "Lesen ist immer erforderlich. Organisieren = Markierungen, Verschieben, Ordner, Entwürfe. Löschen = in den Papierkorb. Senden = Senden, Antworten, Weiterleiten.",
-              "allow_permanent_delete": "Benötigt zusätzlich die Stufe Löschen und für jeden Aufruf ein Bestätigungs-Token.",
+              "permissions": "Lesen ist immer erforderlich. Organisieren = Markierungen, Verschieben, Ordner, Entwürfe. Löschen = in den Papierkorb, leere Ordner löschen (mit Bestätigungscode). Senden = Senden, Antworten, Weiterleiten.",
+              "allow_permanent_delete": "Löscht Nachrichten endgültig, nur aus Papierkorb oder Spam-Ordner. Benötigt zusätzlich die Stufe Löschen und für jeden Aufruf einen Bestätigungscode.",
               "allow_html_output": "Erlaubt get_message, die Nachricht als bereinigtes HTML zu liefern (Format html): Layout und vollständige Linkadressen bleiben, Skripte, Kommentare, versteckte Elemente und Bilder werden entfernt. Aus: nur Text."
             }
           },
@@ -282,6 +282,33 @@
     },
     "invalid_address": {
       "message": "Eine Adresse ist ungültig."
+    },
+    "no_trash_folder": {
+      "message": "Für dieses Konto ist kein Papierkorb bekannt. Bitte in den Optionen (Ordner) festlegen."
+    },
+    "already_in_trash": {
+      "message": "Nachrichten im Papierkorb können nicht erneut dorthin verschoben werden. Zum endgültigen Löschen delete_permanently verwenden."
+    },
+    "not_in_trash_or_junk": {
+      "message": "Endgültig löschen lassen sich nur Nachrichten aus Papierkorb oder Spam-Ordner. Bitte zuerst in den Papierkorb verschieben."
+    },
+    "uidplus_required": {
+      "message": "Der Mailserver kann kein UIDPLUS; endgültiges Löschen wird zum Schutz anderer Nachrichten verweigert."
+    },
+    "folder_not_empty": {
+      "message": "Der Ordner ist nicht leer. Bitte zuerst die Nachrichten verschieben oder löschen."
+    },
+    "folder_has_children": {
+      "message": "Der Ordner hat Unterordner. Bitte diese zuerst löschen."
+    },
+    "permanent_delete_disabled": {
+      "message": "Endgültiges Löschen ist in den Optionen dieses Kontos ausgeschaltet."
+    },
+    "confirm_token_invalid": {
+      "message": "Der Bestätigungscode ist ungültig, abgelaufen, schon benutzt oder gehört zu anderen Nachrichten. Bitte eine neue Vorschau anfordern."
+    },
+    "daily_delete_limit": {
+      "message": "Tageslimit von {limit} gelöschten Nachrichten erreicht (heute noch {remaining} möglich)."
     }
   },
   "issues": {
@@ -648,6 +675,56 @@
         "in_reply_to_ref": {
           "name": "Antwort auf",
           "description": "Referenz der Nachricht, auf die der Entwurf antwortet."
+        }
+      }
+    },
+    "trash": {
+      "name": "In den Papierkorb",
+      "description": "Verschiebt Nachrichten in den Papierkorb (mit „Verschieben“ umkehrbar) und liefert ihre neuen Referenzen. Benötigt die Stufe Löschen.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Der GMX-Mail-Konfigurationseintrag."
+        },
+        "refs": {
+          "name": "Nachrichten",
+          "description": "Liste von Mail-Referenzen (folder, uid, uidvalidity), höchstens 50. Nachrichten, die schon im Papierkorb liegen, werden abgelehnt."
+        }
+      }
+    },
+    "delete_permanently": {
+      "name": "Endgültig löschen",
+      "description": "Löscht Nachrichten aus Papierkorb oder Spam-Ordner endgültig. Ohne Code liefert es nur eine Vorschau und einen Bestätigungscode. Benötigt die Stufe Löschen und die Option für endgültiges Löschen.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Der GMX-Mail-Konfigurationseintrag."
+        },
+        "refs": {
+          "name": "Nachrichten",
+          "description": "Nachrichten im Papierkorb oder Spam-Ordner, höchstens 50."
+        },
+        "confirm_token": {
+          "name": "Bestätigungscode",
+          "description": "Leer lassen für die Vorschau; danach den Code aus der Vorschau übergeben (5 Minuten gültig, einmal)."
+        }
+      }
+    },
+    "delete_folder": {
+      "name": "Ordner löschen",
+      "description": "Löscht einen leeren Ordner ohne Unterordner. Ohne Code liefert es nur eine Vorschau und einen Bestätigungscode. Benötigt die Stufe Löschen.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Der GMX-Mail-Konfigurationseintrag."
+        },
+        "path": {
+          "name": "Ordner",
+          "description": "Pfad des Ordners; Posteingang und Sonderordner sind geschützt."
+        },
+        "confirm_token": {
+          "name": "Bestätigungscode",
+          "description": "Leer lassen für die Vorschau; danach den Code aus der Vorschau übergeben (5 Minuten gültig, einmal)."
         }
       }
     }

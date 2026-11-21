@@ -87,6 +87,10 @@ class AuditLog:
         self._prune()
         return list(reversed(self._entries[-limit:]))
 
+    async def async_flush(self) -> None:
+        """Write pending entries now (unload/reload)."""
+        await self._store.async_save({"entries": list(self._entries)})
+
     async def async_remove(self) -> None:
         """Delete the stored log (entry removed)."""
         await self._store.async_remove()

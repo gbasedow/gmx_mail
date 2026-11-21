@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import ssl
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -27,6 +27,7 @@ from .client.folders import FolderMap, map_special_folders
 from .client.idle import IdleWatcher
 from .client.imap import ConnectionLimiter, ImapSettings, ImapWorker, ServerInfo, tls_context_with_minimum
 from .client.smtp import SmtpSettings
+from .confirm import ConfirmTokens
 from .const import (
     ATTACHMENT_CLEANUP_TIME,
     CONF_ATTACHMENT_RETENTION_DAYS,
@@ -75,6 +76,7 @@ class GmxMailRuntimeData:
     coordinator: GmxMailCoordinator
     counter: ActionCounter
     audit: AuditLog
+    tokens: ConfirmTokens = field(default_factory=ConfirmTokens)  # in-memory key: codes die with the entry
     idle: IdleWatcher | None = None
     push_unavailable: PushState | None = None  # DISABLED or UNSUPPORTED when no watcher runs
 
@@ -324,6 +326,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: GmxMailConfigEntry) -> 
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         await entry.runtime_data.worker.async_shutdown()
+        # Delayed saves would be lost on a reload (e.g. after an options change); the daily limits depend on them.
+        await entry.runtime_data.counter.async_flush()
+        await entry.runtime_data.audit.async_flush()
+        await entry.runtime_data.coordinator.async_flush()
     return unloaded
 
 

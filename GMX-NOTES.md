@@ -48,6 +48,7 @@ wurde nicht gefunden. „Vollständiges Management“ bedeutet hier: alles, was 
 | 34 | `\Recent` | Ein Read-Write-SELECT (IDLE-Verbindung der Integration) löscht `\Recent` auch für andere Sitzungen (STATUS RECENT 3 → 0). | Live-Check 21.11.2026 | – | ✔ | Integration nutzt `\Recent` nicht; Nebenwirkung nur für fremde Clients, die neue Mails über `\Recent` erkennen (selten). |
 | 35 | IDLE-Push / Entwurf | Push nach APPEND in den Posteingang nach ≈ 10 s; APPEND in `Entwürfe` mit APPENDUID; eigene Keywords per STORE. | Live-Check 21.11.2026 | – | ✔ | 10 s Verzögerung ist GMX-seitig; Coordinator-Debounce (5 s) kommt hinzu. |
 | 36 | SEARCH nach Message-ID | `SEARCH HEADER Message-ID <Teil>` fand die ≈ 2 min zuvor per APPEND abgelegte Mail nicht (3 Läufe). Ursache unklar: Header nicht im Suchindex oder Verzögerung > 2 min. | Live-Check 21.11.2026 | – | U | Integration sucht Message-IDs nur per FETCH der Header, nie per SEARCH; das Prüfskript ebenso (seit 21.11.2026). |
+| 37 | IDLE-Erneuerung | Mit dem IDLE-Watcher der Integration (Erneuerung nach 24 min per DONE + IDLE) blieb die Push-Verbindung 35 min ohne `BYE` und ohne Neuverbindung bestehen; Push weiter ≈ 10 s. | Live-Check 21.11.2026 (35 min) | – | ✔ | Die Erneuerung verhindert die Trennung aus Zeile 31. Der Neuverbindungsweg nach `BYE` ist nur gegen Dovecot (`doveadm kick`) geprüft. |
 
 ### Widersprüche zwischen Quellen (nicht aufgelöst)
 
@@ -119,7 +120,9 @@ Manuelle Zusatztests (nicht vom Skript abgedeckt):
   Aufräumen der Ordner und Entwürfe sauber; die Testmail im Posteingang blieb liegen (Zeile 36, Skriptfehler, behoben).
   Der 35-Minuten-Lauf brach am Ende ab: Die ungenutzte Arbeitsverbindung des Skripts war nach ≈ 30 min getrennt (Zeile 32),
   Aufräumen und Abmelden liefen über die tote Verbindung. Behoben: Arbeitsverbindung wird vor der Wartezeit geschlossen,
-  Aufräumen über eine neue Verbindung; `--cleanup-only` entfernt Reste früherer Läufe. Wiederholung steht aus.
+  Aufräumen über eine neue Verbindung; `--cleanup-only` entfernt Reste früherer Läufe. Wiederholung am selben Abend:
+  `--cleanup-only` entfernte alle Reste (2 Ordner, 3 Mails, 1 Entwurf); der 35-Minuten-Lauf lief durch, ohne Trennung (Zeile 37),
+  Aufräumen vollständig (`docs/live-check-2026-11-21-idle.json`).
 - Noch offen: Dauer der IMAP-Abschaltung (Langzeitbeobachtung). Expunge im Papierkorb bleibt ungetestet; v1 löscht standardmäßig nie dauerhaft.
 
 ### Ergebnisfeld (Vorlage für Folgeläufe)

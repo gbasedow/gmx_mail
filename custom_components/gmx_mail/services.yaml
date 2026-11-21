@@ -355,3 +355,48 @@ save_draft:
     in_reply_to_ref:
       selector:
         object:
+
+trash:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmx_mail
+    refs:
+      required: true
+      example: '[{"folder": "INBOX", "uid": 123, "uidvalidity": 456}]'
+      selector:
+        object:
+
+delete_permanently:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmx_mail
+    refs:
+      required: true
+      example: '[{"folder": "Gelöscht", "uid": 123, "uidvalidity": 456}]'
+      selector:
+        object:
+    confirm_token:
+      selector:
+        text:
+
+delete_folder:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmx_mail
+    path:
+      required: true
+      example: Archiv/Alt
+      selector:
+        text:
+    confirm_token:
+      selector:
+        text:

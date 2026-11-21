@@ -21,7 +21,8 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
 
 - Stand: 21.11.2026. **M1–M3 in `main`. M4 (Organisieren, Audit-Log) freigegeben (21.11.2026) und per PR nach `main` übernommen.**
   Live-Check gegen das GMX-Testkonto (21.11.2026) bestanden: Teil-FETCH ok, COPYUID bei MOVE, SELECT löscht `\Recent`, Push ≈ 10 s.
-  Offen aus M4: 35-Minuten-Lauf (BYE/Reconnect). Danach M5 (Löschen) – erst nach Freigabe.
+  35-Minuten-Lauf bestanden: IDLE-Erneuerung nach 24 min hält die Verbindung ohne `BYE`. M4 ist damit abgeschlossen.
+  **M5 (Löschen) freigegeben (21.11.2026) und per PR nach `main` übernommen.** Offen aus M5: Live-Check des Löschwegs gegen GMX (Nutzer). Danach M6 (Senden) – erst nach Freigabe.
   M0 (Live-Probe) ist abgeschlossen; Ergebnisse in `GMX-NOTES.md` (Spalte „Ergebnis“, Abschnitt 4) und `docs/probe-2026-11-20-v4.json`.
   Kern: keine Gesendet-Kopie per SMTP (→ `sent_copy_mode=append`), Suchindex ≈ 30 s verzögert, ruhende Verbindungen/IDLE nach ≈ 30 min
   getrennt (`* BYE timeout`), `COPYUID` bei MOVE ungetaggt (2 Messpunkte), Probe v3d nutzt `UNSELECT` statt `CLOSE`.
@@ -56,6 +57,11 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
   Entwurf per APPEND), `audit.py` (Store, Ereignis `gmx_mail_action_executed`, nur Fingerabdruck der Parameter), `attachments.py`
   (Option `attachment_retention_days`), IDLE-Korrektur nach BYE, `tools/gmx_live_check.py`. Details: SPEC §3 „Umsetzung M4“, Entscheidungen Nr. 37–45 (alle freigegeben).
   Prüfungen: 284 HA-Tests + 16 Servertests (GreenMail, Dovecot inkl. Reconnect per `doveadm kick` und Live-Check-Skript) + Staging (Schritte 8–9) + 29 Probe-Tests grün, ruff, mypy grün.
+- **M5-Umfang:** Aktionen `trash`, `delete_permanently` (Option `allow_permanent_delete`, nur Papierkorb/Spam, Vorschau + Bestätigungscode,
+  `\Deleted` + UID EXPUNGE genau dieser UIDs, nur mit UIDPLUS) und `delete_folder` (leer, ohne Unterordner, Code) – Stufe D, max. 50 Refs,
+  Tageslimit zählt Papierkorb und endgültiges Löschen; `client/deleter.py`, `confirm.py` (HMAC, 5 min, einmal, Schlüssel nur im Speicher);
+  Audit-Log mit `preview`/`rejected`; Speichern von Zähler, Audit-Log und letzter UID beim Entladen. Details: SPEC §3 „Umsetzung M5“, Entscheidungen Nr. 46–53 (alle freigegeben).
+  Prüfungen: 307 HA-Tests + 18 Servertests (u. a. fremde `\Deleted`-Mail im Papierkorb bleibt) + Staging (Schritt 10) grün, ruff, mypy grün.
 - Repo-Sichtung aus Abschnitt 10 erledigt: `docs/REVIEW-REPOS-2026-11-20.md`.
 - **Noch offen:** IMAP-Abschaltfrist (Langzeitbeobachtung).
 - Alle Annahmen, die in `GMX-NOTES.md` als `U` (unbestätigt) oder `LIVE` markiert sind, nicht als Fakt behandeln.
@@ -155,7 +161,7 @@ GMX_USER=... GMX_PASS=... python3 tools/gmx_live_check.py --cleanup-only --outpu
 ## 9. Meilensteine (Kurzfassung, Details in `SPEC.md`)
 
 M0 Live-Probe (erledigt) · M1 Gerüst + Flows · M2 Lesen · M3 Coordinator/IDLE/Sensoren/Diagnose/Repairs · M4 Organisieren ·
-M5 Löschen · M6 Senden · M7 Härtung, Doku, Release.
+M5 Löschen (umgesetzt) · M6 Senden · M7 Härtung, Doku, Release.
 
 ## 10. Gesichtete Fremdprojekte
 

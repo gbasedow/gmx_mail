@@ -362,6 +362,19 @@ class FakeIMAPClient:
             self.server.mailboxes[new_name] = self.server.mailboxes.pop(old_name)
         return b"OK"
 
+    def delete_folder(self, folder: str) -> bytes:
+        """DELETE (folder)."""
+        self._check_open()
+        if self.server.write_error is not None:
+            error, self.server.write_error = self.server.write_error, None
+            raise error
+        if folder not in {name for _flags, _delim, name in self.server.folders}:
+            raise IMAPClientError("DELETE failed: NO")
+        self.server.commands.append(("delete_folder", folder))
+        self.server.folders = [entry for entry in self.server.folders if entry[2] != folder]
+        self.server.mailboxes.pop(folder, None)
+        return b"OK"
+
     def append(self, folder: str, msg: bytes, flags: Any = (), msg_time: Any = None) -> bytes:
         """APPEND (APPENDUID like GMX unless disabled)."""
         self._check_open()

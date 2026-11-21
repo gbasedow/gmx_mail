@@ -21,7 +21,7 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
 
 - Stand: 21.11.2026. **M1–M3 in `main`. M4 (Organisieren, Audit-Log) freigegeben (21.11.2026) und per PR nach `main` übernommen.**
   Live-Check gegen das GMX-Testkonto (21.11.2026) bestanden: Teil-FETCH ok, COPYUID bei MOVE, SELECT löscht `\Recent`, Push ≈ 10 s.
-  Offen aus M4: 35-Minuten-Lauf (BYE/Reconnect). Danach M5 (Löschen) – erst nach Freigabe.
+  35-Minuten-Lauf bestanden: IDLE-Erneuerung nach 24 min hält die Verbindung ohne `BYE`. M4 ist damit abgeschlossen. Nächster Schritt: M5 (Löschen) – erst nach Freigabe.
   M0 (Live-Probe) ist abgeschlossen; Ergebnisse in `GMX-NOTES.md` (Spalte „Ergebnis“, Abschnitt 4) und `docs/probe-2026-11-20-v4.json`.
   Kern: keine Gesendet-Kopie per SMTP (→ `sent_copy_mode=append`), Suchindex ≈ 30 s verzögert, ruhende Verbindungen/IDLE nach ≈ 30 min
   getrennt (`* BYE timeout`), `COPYUID` bei MOVE ungetaggt (2 Messpunkte), Probe v3d nutzt `UNSELECT` statt `CLOSE`.

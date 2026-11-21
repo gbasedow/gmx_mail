@@ -183,7 +183,7 @@ Begründungen: `docs/DECISIONS.md` Nr. 37–45.
 - **IDLE-Korrektur:** nach `* BYE`/Verbindungsverlust kein DONE/LOGOUT mehr, sofortiger Reconnect (Dovecot-Test mit `doveadm kick`: ≈ 6 s).
 - **Manuelle GMX-Prüfung:** `tools/gmx_live_check.py` (Produktionscode, eigener Testordner, nur Metadaten): `\Recent` nach SELECT,
   Teil-FETCH, COPYUID bei MOVE/COPY, Entwurf mit APPENDUID, IDLE-Push; mit `--idle-minutes 35` das BYE nach ≈ 30 min samt Reconnect.
-  Gegen Dovecot läuft es in der CI mit. Lauf gegen GMX am 21.11.2026: alles bestanden (GMX-NOTES Zeilen 28, 33–35); der 35-Minuten-Lauf steht aus.
+  Gegen Dovecot läuft es in der CI mit. Lauf gegen GMX am 21.11.2026: alles bestanden (GMX-NOTES Zeilen 28, 33–37), auch der 35-Minuten-Lauf: Die Erneuerung nach 24 min hält die Push-Verbindung ohne Trennung.
 
 ## 4. Sensoren, Ereignisse, Repairs, Diagnose
 
@@ -289,7 +289,7 @@ Die Allowlist ist die einzige harte technische Grenze gegen Datenabfluss; Token 
   Übernommene offene Punkte aus M2/M3 (Nutzerentscheidung 21.11.2026), Stand nach Umsetzung:
   - Freigabe DECISIONS Nr. 32 – erledigt.
   - Live-Prüfungen gegen GMX mit Testkonto – Werkzeug fertig (`tools/gmx_live_check.py` statt Erweiterung von `gmx_probe.py`,
-    DECISIONS Nr. 45) – Kurzlauf am 21.11.2026 bestanden, **35-Minuten-Lauf offen**.
+    DECISIONS Nr. 45) – Kurz- und 35-Minuten-Lauf am 21.11.2026 bestanden.
   - Aufräumen gespeicherter Anhänge – erledigt (DECISIONS Nr. 42).
   - Reconnect gegen einen echten Server – erledigt per `doveadm kick` statt kurzem Idle-Timeout (DECISIONS Nr. 44).
   - Weiter offen (nicht M4): IMAP-Abschaltfrist bei GMX (Langzeitbeobachtung), Stundenlimit für Empfänger (M6).

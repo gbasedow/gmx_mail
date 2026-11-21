@@ -23,3 +23,5 @@ durch Claude über den ha-mcp-Server. **Status: Meilenstein M3 (Leseaktionen, Se
 
 Installation zum Testen (nur Staging): Ordner `custom_components/gmx_mail` nach `config/custom_components/` kopieren, Home Assistant
 neu starten, Integration „GMX Mail“ hinzufügen. Vorher im GMX-Webmailer POP3/IMAP einschalten und ein App-Passwort anlegen.
+
+Lizenz: MIT (siehe `LICENSE`).

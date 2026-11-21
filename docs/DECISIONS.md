@@ -34,6 +34,7 @@
 | 30 | 2026-11-21 | Kein eigener Heartbeat gegen die automatische IMAP-Abschaltung. | Die Abfrage alle 5 min meldet sich ohnehin an; ob GMX das als Nutzung wertet, ist offen (Langzeitbeobachtung). Vom Nutzer freigegeben. |
 | 31 | 2026-11-21 | Die IDLE-Verbindung öffnet den Posteingang mit SELECT statt EXAMINE. | aioimaplib 2.0.3 wechselt nur nach `select()` in den Zustand SELECTED und lehnt IDLE sonst ab (gefunden im GreenMail-Test). Die Verbindung sendet nur IDLE, DONE und LOGOUT; LOGOUT löscht nichts (RFC 3501). Nebenwirkung: `\Recent` kann verbraucht werden. |
 | 32 | 2026-11-21 | `server_rules_unavailable` als ignorierbare Warnung (einmal je Installation). | HA kennt keine Info-Stufe für Repairs; ignorierte Hinweise bleiben ignoriert. |
+| 33 | 2026-11-21 | Lizenz MIT (`LICENSE`). Das Repository ist öffentlich, die HACS-Prüfung läuft wieder. | Entscheidung des Nutzers; HACS verlangt eine Lizenz. Beschreibung und Topics sind Repository-Einstellungen auf GitHub und müssen vom Nutzer gesetzt werden (die Session darf sie nicht ändern). |
 
 - `sent_copy_mode` Standard `append`: GMX legt per SMTP keine Gesendet-Kopie an (M0, Lauf 3).
 

@@ -31,8 +31,8 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
   `ConnectionLimiter` max. 2), `client/folders.py` (SPECIAL-USE → Heuristik → Override, Mehrdeutigkeit), `client/smtp.py` (nur Login-Check),
   Repair-Issue `imap_possibly_disabled`. (M1 enthielt noch keine Aktionen.)
 - Prüfungen: 107 Integrationstests + 29 Probe-Tests grün, Coverage 99 %, ruff, mypy (strict), hassfest (GitHub Action) grün.
-  **HACS-Validierung ungeprüft:** Die HACS-Action prüft nur öffentliche Repositories; der Job wird übersprungen, solange das Repo privat ist
-  (vom Nutzer so entschieden, DECISIONS Nr. 17). Vor einer Veröffentlichung über HACS das Repo öffentlich schalten und die Action prüfen. `pytest-homeassistant-custom-component` 0.13.375 bringt HA **2026.10.4** mit – für 2026.11 gibt es noch keine Version.
+  **HACS:** Das Repository ist seit 21.11.2026 öffentlich, die HACS-Action läuft wieder (Job wird nur bei privatem Repo übersprungen, DECISIONS Nr. 17).
+  Lizenz MIT ist eingecheckt; Beschreibung und Topics muss der Nutzer in den GitHub-Einstellungen setzen (DECISIONS Nr. 33). `pytest-homeassistant-custom-component` 0.13.375 bringt HA **2026.10.4** mit – für 2026.11 gibt es noch keine Version.
 - Entscheidungen aus M1: `docs/DECISIONS.md` Nr. 11–17, alle vom Nutzer freigegeben (Nr. 12: Limits frei wählbar, SPEC-Werte als Voreinstellung). Offen für M6: Stundenlimit für Empfänger (Drittquelle: 11 Empfänger/Stunde, unbestätigt).
 - **M2-Umfang:** Aktionen `list_folders`, `search`, `get_message`, `get_attachment`, `get_status` (`services.py`, nur Stufe R,
   `SupportsResponse.ONLY`); `client/reader.py` (EXAMINE/UNSELECT, `BODY.PEEK`, Indexverzögerungs-Fallback, SORT oder clientseitig),
@@ -134,7 +134,7 @@ docker compose up -d greenmail && pytest -q -p no:homeassistant -m integration t
 ruff check . && ruff format --check .
 mypy custom_components/gmx_mail
 # hassfest + HACS-Validierung laufen als GitHub Actions (.github/workflows/validate.yml)
-# HACS-Action prüft nur öffentliche Repos: solange gmx_mail privat ist, wird der Job übersprungen (HACS ungeprüft)
+# HACS-Action prüft nur öffentliche Repos (bei privatem Repo wird der Job übersprungen)
 GMX_USER=... GMX_PASS=... python3 tools/gmx_probe.py   # nur manuell, Test-Konto
 ```
 

@@ -35,6 +35,9 @@
 | 31 | 2026-11-21 | Die IDLE-Verbindung öffnet den Posteingang mit SELECT statt EXAMINE. | aioimaplib 2.0.3 wechselt nur nach `select()` in den Zustand SELECTED und lehnt IDLE sonst ab (gefunden im GreenMail-Test). Die Verbindung sendet nur IDLE, DONE und LOGOUT; LOGOUT löscht nichts (RFC 3501). Nebenwirkung: `\Recent` kann verbraucht werden. Vom Nutzer freigegeben (21.11.2026). |
 | 32 | 2026-11-21 | `server_rules_unavailable` als ignorierbare Warnung (einmal je Installation). | HA kennt keine Info-Stufe für Repairs; ignorierte Hinweise bleiben ignoriert. |
 | 33 | 2026-11-21 | Lizenz MIT (`LICENSE`). Das Repository ist öffentlich, die HACS-Prüfung läuft wieder. | Entscheidung des Nutzers; HACS verlangt eine Lizenz. Beschreibung und Topics sind Repository-Einstellungen auf GitHub und müssen vom Nutzer gesetzt werden (die Session darf sie nicht ändern). |
+| 34 | 2026-11-21 | GMX-naher Dovecot (2.4.1) als zweiter Testserver: TLS mit Test-CA, GMX-Capabilities, Ordner mit SPECIAL-USE und Umlauten. Test-CA wird je Lauf erzeugt, nicht eingecheckt. | Prüft den echten Produktionspfad inklusive Zertifikatsprüfung; keine Schlüssel im Repository. Auftrag des Nutzers („offene Tests nachholen“). |
+| 35 | 2026-11-21 | Staging-Test mit echtem HA 2026.11.2 im Container (Docker Hub), `imapclient` aus vorab geladenem Wheel, `REQUESTS_CA_BUNDLE` auf die Test-CA; Test nur über REST/WebSocket. | Zielversion statt der Test-Bibliothek (HA 2026.10.4); entspricht der Nutzung durch ha-mcp. ghcr.io ist aus dieser Umgebung nicht erreichbar. |
+| 36 | 2026-11-21 | Ordnernamen für aioimaplib werden in modifiziertes UTF-7 kodiert und gequotet. | aioimaplib übernimmt den Namen unverändert in die Befehlszeile; Umlaute oder Leerzeichen würden abgelehnt (gefunden im Dovecot-Test). |
 
 - `sent_copy_mode` Standard `append`: GMX legt per SMTP keine Gesendet-Kopie an (M0, Lauf 3).
 

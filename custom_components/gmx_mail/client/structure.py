@@ -43,6 +43,14 @@ class PartInfo:
         """Return whether the part is marked inline (e.g. an embedded image)."""
         return self.disposition == "inline" or (self.content_id is not None and self.disposition is None)
 
+    @property
+    def embedded(self) -> bool:
+        """Return whether the part is an inline image shown inside the HTML text (not a file for the reader).
+
+        Only images count: some senders (seen with GMX system mails) mark PDF attachments as inline.
+        """
+        return self.inline and self.mime.startswith("image/")
+
 
 def _text(value: Any) -> str | None:
     if value is None:

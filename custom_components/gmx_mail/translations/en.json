@@ -75,8 +75,8 @@
               "allow_html_output": "Allow HTML output"
             },
             "data_description": {
-              "permissions": "Read is always required. Organize = flags, move, folders, drafts. Delete = move to trash. Send = send, reply, forward.",
-              "allow_permanent_delete": "Also needs the Delete level and a confirmation token for each call.",
+              "permissions": "Read is always required. Organize = flags, move, folders, drafts. Delete = move to trash, delete empty folders (with confirmation code). Send = send, reply, forward.",
+              "allow_permanent_delete": "Deletes messages for good, only from the trash or spam folder. Also needs the Delete level and a confirmation code for each call.",
               "allow_html_output": "Lets get_message return the message as cleaned HTML (format html): layout and full link addresses are kept; scripts, comments, hidden elements and images are removed. Off: text only."
             }
           },
@@ -282,6 +282,33 @@
     },
     "invalid_address": {
       "message": "An address is invalid."
+    },
+    "no_trash_folder": {
+      "message": "No trash folder is known for this account. Set it in the options (folders)."
+    },
+    "already_in_trash": {
+      "message": "Messages already in the trash cannot be moved there again. Use delete_permanently to delete them for good."
+    },
+    "not_in_trash_or_junk": {
+      "message": "Only messages in the trash or spam folder can be deleted for good. Move them to the trash first."
+    },
+    "uidplus_required": {
+      "message": "The mail server lacks UIDPLUS; permanent deletion is refused to protect other messages."
+    },
+    "folder_not_empty": {
+      "message": "The folder is not empty. Move or delete its messages first."
+    },
+    "folder_has_children": {
+      "message": "The folder has subfolders. Delete them first."
+    },
+    "permanent_delete_disabled": {
+      "message": "Permanent deletion is switched off in the options of this account."
+    },
+    "confirm_token_invalid": {
+      "message": "The confirmation code is invalid, expired, already used or belongs to other messages. Request a new preview."
+    },
+    "daily_delete_limit": {
+      "message": "Daily deletion limit of {limit} messages reached ({remaining} left today)."
     }
   },
   "issues": {
@@ -648,6 +675,56 @@
         "in_reply_to_ref": {
           "name": "Reply to",
           "description": "Reference of the message this draft answers."
+        }
+      }
+    },
+    "trash": {
+      "name": "Move to trash",
+      "description": "Moves messages into the trash folder (reversible with move) and returns their new references. Needs the Delete level.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The GMX Mail config entry."
+        },
+        "refs": {
+          "name": "Messages",
+          "description": "List of message references (folder, uid, uidvalidity), at most 50. Messages already in the trash are refused."
+        }
+      }
+    },
+    "delete_permanently": {
+      "name": "Delete permanently",
+      "description": "Deletes messages in the trash or spam folder for good. Without a code it only returns a preview and a confirmation code. Needs the Delete level and the option for permanent deletion.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The GMX Mail config entry."
+        },
+        "refs": {
+          "name": "Messages",
+          "description": "Messages in the trash or spam folder, at most 50."
+        },
+        "confirm_token": {
+          "name": "Confirmation code",
+          "description": "Leave empty for the preview; then pass the code from the preview (valid 5 minutes, once)."
+        }
+      }
+    },
+    "delete_folder": {
+      "name": "Delete folder",
+      "description": "Deletes an empty folder without subfolders. Without a code it only returns a preview and a confirmation code. Needs the Delete level.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The GMX Mail config entry."
+        },
+        "path": {
+          "name": "Folder",
+          "description": "Path of the folder; the inbox and special folders are protected."
+        },
+        "confirm_token": {
+          "name": "Confirmation code",
+          "description": "Leave empty for the preview; then pass the code from the preview (valid 5 minutes, once)."
         }
       }
     }

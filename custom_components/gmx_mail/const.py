@@ -178,6 +178,7 @@ EVENT_ACTION_EXECUTED: Final = "gmx_mail_action_executed"
 # --------------------------------------------------------------------------- organising (M4)
 
 MAX_REFS_PER_CALL: Final = 100
+MAX_DELETE_PER_CALL: Final = 50  # trash / delete_permanently per call (SPEC section 5, measure 5)
 ATTACHMENT_CLEANUP_TIME: Final = (3, 17, 0)  # local time, once a day
 
 

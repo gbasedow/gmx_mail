@@ -19,7 +19,7 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
 
 ## 2. Status
 
-- Stand: 21.11.2026. **M1–M3 in `main`. M4 (Organisieren, Audit-Log) umgesetzt auf Branch `claude/wizardly-gauss-af5crm`, wartet auf Freigabe.**
+- Stand: 21.11.2026. **M1–M3 in `main`. M4 (Organisieren, Audit-Log) freigegeben (21.11.2026) und per PR nach `main` übernommen.**
   Offen aus M4: Lauf von `tools/gmx_live_check.py` gegen das GMX-Testkonto durch den Nutzer. Danach M5 (Löschen) – erst nach Freigabe.
   M0 (Live-Probe) ist abgeschlossen; Ergebnisse in `GMX-NOTES.md` (Spalte „Ergebnis“, Abschnitt 4) und `docs/probe-2026-11-20-v4.json`.
   Kern: keine Gesendet-Kopie per SMTP (→ `sent_copy_mode=append`), Suchindex ≈ 30 s verzögert, ruhende Verbindungen/IDLE nach ≈ 30 min
@@ -53,7 +53,7 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
   `SupportsResponse.OPTIONAL`, max. 100 Refs, kein Tageslimit) und `get_audit_log` (R); `client/writer.py` (SELECT/UNSELECT, COPYUID aus dem
   imaplib-Antwortspeicher mit Message-ID-Rückfall, MOVE-Rückfall COPY + `\Deleted` + UID EXPUNGE nur mit UIDPLUS, Ordner- und Flag-Regeln,
   Entwurf per APPEND), `audit.py` (Store, Ereignis `gmx_mail_action_executed`, nur Fingerabdruck der Parameter), `attachments.py`
-  (Option `attachment_retention_days`), IDLE-Korrektur nach BYE, `tools/gmx_live_check.py`. Details: SPEC §3 „Umsetzung M4“, Entscheidungen Nr. 37–45.
+  (Option `attachment_retention_days`), IDLE-Korrektur nach BYE, `tools/gmx_live_check.py`. Details: SPEC §3 „Umsetzung M4“, Entscheidungen Nr. 37–45 (alle freigegeben).
   Prüfungen: 284 HA-Tests + 16 Servertests (GreenMail, Dovecot inkl. Reconnect per `doveadm kick` und Live-Check-Skript) + Staging (Schritte 8–9) + 29 Probe-Tests grün, ruff, mypy grün.
 - Repo-Sichtung aus Abschnitt 10 erledigt: `docs/REVIEW-REPOS-2026-11-20.md`.
 - **Noch offen:** IMAP-Abschaltfrist (Langzeitbeobachtung).

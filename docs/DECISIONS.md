@@ -53,8 +53,8 @@
 | 49 | 2026-11-21 | Tageslimit `max_delete_per_day` (Voreinstellung 200) zählt jede Mail, die in den Papierkorb geht oder endgültig gelöscht wird; geprüft vor Vorschau und Ausführung; max. 50 Mails je Aufruf. | Bewusst streng. Vom Nutzer freigegeben (M5-Vorschlag 4). |
 | 50 | 2026-11-21 | `delete_folder`: nur leere Ordner ohne Unterordner, nie INBOX oder Spezialordner; mit Bestätigungscode, aber ohne die Option für endgültiges Löschen. | Ein leerer Ordner enthält keine Mails. Vom Nutzer freigegeben (M5-Vorschlag 5). |
 | 51 | 2026-11-21 | Live-Prüfung des Löschwegs mit `tools/gmx_live_check.py` (eigene Testmail: Papierkorb, Vorschau, endgültig löschen, Kontrolle). | Endgültiges Löschen im GMX-Papierkorb war ungeprüft. Vom Nutzer freigegeben (M5-Vorschlag 6). |
-| 52 | 2026-11-21 | Audit-Log der Stufe D enthält auch Vorschauen (`preview`) und abgelehnte Aufrufe (`rejected`, mit Fehlerschlüssel). | Zeigt, was versucht wurde, ohne Inhalte. Teil des freigegebenen M5-Plans. |
-| 53 | 2026-11-21 | Zähler, Audit-Log und zuletzt gesehene UID werden beim Entladen sofort gespeichert (nicht nur verzögert). | Fehler gefunden beim M5-Test: Ein Reload innerhalb der Speicherverzögerung (z. B. nach einer Optionsänderung) hätte das Tageslimit zurückgesetzt und eine neue Mail doppelt gemeldet. |
+| 52 | 2026-11-21 | Audit-Log der Stufe D enthält auch Vorschauen (`preview`) und abgelehnte Aufrufe (`rejected`, mit Fehlerschlüssel). | Zeigt, was versucht wurde, ohne Inhalte. Teil des freigegebenen M5-Plans. Vom Nutzer freigegeben (21.11.2026). |
+| 53 | 2026-11-21 | Zähler, Audit-Log und zuletzt gesehene UID werden beim Entladen sofort gespeichert (nicht nur verzögert). | Fehler gefunden beim M5-Test: Ein Reload innerhalb der Speicherverzögerung (z. B. nach einer Optionsänderung) hätte das Tageslimit zurückgesetzt und eine neue Mail doppelt gemeldet. Vom Nutzer freigegeben (21.11.2026). |
 
 - `sent_copy_mode` Standard `append`: GMX legt per SMTP keine Gesendet-Kopie an (M0, Lauf 3).
 

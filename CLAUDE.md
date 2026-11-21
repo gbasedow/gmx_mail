@@ -22,7 +22,7 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
 - Stand: 21.11.2026. **M1–M3 in `main`. M4 (Organisieren, Audit-Log) freigegeben (21.11.2026) und per PR nach `main` übernommen.**
   Live-Check gegen das GMX-Testkonto (21.11.2026) bestanden: Teil-FETCH ok, COPYUID bei MOVE, SELECT löscht `\Recent`, Push ≈ 10 s.
   35-Minuten-Lauf bestanden: IDLE-Erneuerung nach 24 min hält die Verbindung ohne `BYE`. M4 ist damit abgeschlossen.
-  **M5 (Löschen) umgesetzt auf Branch `claude/wizardly-gauss-af5crm`, wartet auf Freigabe.** Offen aus M5: Live-Check des Löschwegs gegen GMX (Nutzer).
+  **M5 (Löschen) freigegeben (21.11.2026) und per PR nach `main` übernommen.** Offen aus M5: Live-Check des Löschwegs gegen GMX (Nutzer). Danach M6 (Senden) – erst nach Freigabe.
   M0 (Live-Probe) ist abgeschlossen; Ergebnisse in `GMX-NOTES.md` (Spalte „Ergebnis“, Abschnitt 4) und `docs/probe-2026-11-20-v4.json`.
   Kern: keine Gesendet-Kopie per SMTP (→ `sent_copy_mode=append`), Suchindex ≈ 30 s verzögert, ruhende Verbindungen/IDLE nach ≈ 30 min
   getrennt (`* BYE timeout`), `COPYUID` bei MOVE ungetaggt (2 Messpunkte), Probe v3d nutzt `UNSELECT` statt `CLOSE`.
@@ -60,7 +60,7 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
 - **M5-Umfang:** Aktionen `trash`, `delete_permanently` (Option `allow_permanent_delete`, nur Papierkorb/Spam, Vorschau + Bestätigungscode,
   `\Deleted` + UID EXPUNGE genau dieser UIDs, nur mit UIDPLUS) und `delete_folder` (leer, ohne Unterordner, Code) – Stufe D, max. 50 Refs,
   Tageslimit zählt Papierkorb und endgültiges Löschen; `client/deleter.py`, `confirm.py` (HMAC, 5 min, einmal, Schlüssel nur im Speicher);
-  Audit-Log mit `preview`/`rejected`; Speichern von Zähler, Audit-Log und letzter UID beim Entladen. Details: SPEC §3 „Umsetzung M5“, Entscheidungen Nr. 46–53.
+  Audit-Log mit `preview`/`rejected`; Speichern von Zähler, Audit-Log und letzter UID beim Entladen. Details: SPEC §3 „Umsetzung M5“, Entscheidungen Nr. 46–53 (alle freigegeben).
   Prüfungen: 307 HA-Tests + 18 Servertests (u. a. fremde `\Deleted`-Mail im Papierkorb bleibt) + Staging (Schritt 10) grün, ruff, mypy grün.
 - Repo-Sichtung aus Abschnitt 10 erledigt: `docs/REVIEW-REPOS-2026-11-20.md`.
 - **Noch offen:** IMAP-Abschaltfrist (Langzeitbeobachtung).

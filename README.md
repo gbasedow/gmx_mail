@@ -1,7 +1,7 @@
 # gmx_mail
 
 Home-Assistant-Custom-Integration für ein GMX-Postfach (IMAP/SMTP), gedacht für die Verwaltung des Postfachs
-durch Claude über den ha-mcp-Server. **Status: Meilenstein M3 (Leseaktionen, Sensoren, IDLE-Push, Ereignisse, Diagnose) – noch keine schreibenden Aktionen.**
+durch Claude über den ha-mcp-Server. **Status: Meilenstein M4 (Lesen, Sensoren, IDLE-Push, Ereignisse, Diagnose, Organisieren mit Audit-Log) – noch kein Löschen und kein Versand.**
 
 | Datei | Inhalt |
 |---|---|
@@ -14,7 +14,8 @@ durch Claude über den ha-mcp-Server. **Status: Meilenstein M3 (Leseaktionen, Se
 | `docs/START-PROMPT.md` | Prompt zum Start der Arbeit in Claude Code |
 | `docs/probe-2026-11-20*.json` | Bereinigte Ergebnisse der M0-Live-Tests (Lauf 1–3) |
 | `tools/gmx_probe.py` | Live-Prüfskript gegen ein GMX-Testkonto (gibt keine Mailinhalte aus) |
-| `custom_components/gmx_mail/` | Die Integration: Flows, Leseaktionen (`services.py`), `client/` (IMAP-Worker, Lesen, Bereinigung, Ordnererkennung, SMTP-Check) |
+| `tools/gmx_live_check.py` | Manuelle Prüfung des Integrationscodes gegen ein GMX-Testkonto (eigener Testordner, nur Metadaten) |
+| `custom_components/gmx_mail/` | Die Integration: Flows, Aktionen (`services.py`), Audit-Log, Sensoren, `client/` (IMAP-Worker, Lesen, Schreiben, IDLE, Bereinigung, Ordnererkennung, SMTP-Check) |
 | `tests/gmx_mail/` | Tests der Integration mit `pytest-homeassistant-custom-component` (`pytest -q`) |
 | `tests/integration/`, `docker-compose.yml` | Servertests gegen GreenMail und einen GMX-nahen Dovecot (TLS mit Test-CA) im Container |
 | `tests/staging/` | Ende-zu-Ende-Test mit echtem Home Assistant 2026.11.2 im Container (siehe `tests/staging/README.md`) |

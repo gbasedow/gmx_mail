@@ -99,11 +99,11 @@ Lesen: `SupportsResponse.ONLY`; Schreiben: `SupportsResponse.OPTIONAL`.
 | `get_attachment` | `ref`, `part_id`, `mode`(save\|base64), `max_bytes`(10 MB) | `{path, filename, size, sha256}` bzw. `{base64}` wenn <= 256 KB | R | speichert nur unter `/media/gmx_mail/<entry>/`, Dateiname bereinigt |
 | `get_status` | – | `{capabilities, folders_map, unseen_inbox, last_sync, idle_active, limits_used}` | R | – |
 | `get_audit_log` | `limit`(50) | `entries[…]` ohne Inhalte | R | – |
-| `set_flags` | `refs[]`, `add[]`, `remove[]` (seen, flagged, answered, `$keyword`) | `{updated:n}` | O | max. 100 Refs; Keywords nur wenn PERMANENTFLAGS `\*` enthält |
+| `set_flags` | `refs[]`, `add[]`, `remove[]` (seen, flagged, answered, `$keyword`) | `{updated, missing}` | O | max. 100 Refs; Keywords nur wenn PERMANENTFLAGS `\*` enthält |
 | `move` / `copy` | `refs[]`, `target_folder` | `{moved:n, new_refs[]}` (COPYUID aus getaggter **oder** ungetaggter Antwort lesen – GMX liefert ihn bei MOVE ungetaggt als `* OK [COPYUID …]`, bei COPY getaggt; `imapclient.move()` gibt ihn nicht zurück → eigener Parser. Fehlt beides: Ziel-UID per Message-ID, wegen Indexverzögerung mit FETCH-Header-Abgleich) | O | max. 100; Ziel muss existieren |
 | `mark_spam` / `mark_not_spam` | `refs[]` | `{moved:n}` | O | verschiebt nach/aus Junk; Wirkung auf GMX-Lernfilter unbestätigt |
-| `create_folder` / `rename_folder` | `name`/`path`, `parent` | `{path}` | O | Spezialordner nicht umbenennbar |
-| `save_draft` | `to, cc, bcc, subject, body_text, body_html?, in_reply_to_ref?` | `{ref}` | O | APPEND mit `\Draft`; Gesamtgröße <= `APPENDLIMIT` (GMX: 29 360 128 B), sonst `message_too_large` |
+| `create_folder` / `rename_folder` | `name`/`path`, `parent` | `{path}` bzw. `{path, previous_path}` | O | Spezialordner nicht umbenennbar |
+| `save_draft` | `to, cc, bcc, subject, body_text, body_html?, in_reply_to_ref?` | `{ref, size}` | O | APPEND mit `\Draft`; Gesamtgröße <= `APPENDLIMIT` (GMX: 29 360 128 B), sonst `message_too_large` |
 | `trash` | `refs[]` | `{trashed:n}` | D | in den Papierkorb verschieben; max. 50 je Aufruf, max. 200 je Tag |
 | `delete_permanently` | `refs[]`, `confirm_token?` | ohne Token: `{preview, confirm_token, expires_in:300}`; mit Token: `{deleted:n}` | D + Option `allow_permanent_delete` | `\Deleted` + UID EXPUNGE; ohne UIDPLUS verweigert |
 | `delete_folder` | `path`, `confirm_token?` | wie oben | D | nur leere Ordner, nie Spezialordner |
@@ -151,7 +151,39 @@ Abweichungen und Präzisierungen gegenüber der Tabelle oben (Begründung: `docs
 - **`list_folders`:** Schlägt STATUS für einen einzelnen Ordner fehl, fehlt nur dort die Anzahl (`counts_unavailable: true`).
   LIST-STATUS wird nicht genutzt (imapclient unterstützt es nicht); ein STATUS je Ordner.
 - **Teil-FETCH:** GreenMail antwortet auf `BODY.PEEK[x]<0.n>` formal fehlerhaft (fehlendes Leerzeichen vor dem Literal), imapclient bricht ab.
-  Rückfall: ganzer Teil (Vorschau nur bis 64 KB). Ob GMX korrekt antwortet, ist ungeprüft (LIVE).
+  Rückfall: ganzer Teil (Vorschau nur bis 64 KB). Ob GMX korrekt antwortet, ist ungeprüft (LIVE; Prüfung mit `tools/gmx_live_check.py`).
+
+### Umsetzung M4 – Organisieren (Stand 21.11.2026)
+
+Begründungen: `docs/DECISIONS.md` Nr. 37–45.
+- **Allgemein** (`services.py`, `client/writer.py`): Stufe O, `SupportsResponse.OPTIONAL`, max. 100 Referenzen je Aufruf (doppelte werden
+  zusammengefasst), kein Tageslimit (nur Zähler „Aktionen heute“, Ebene `organize`). Ordner werden mit SELECT (read-write) geöffnet und mit
+  UNSELECT verlassen (ohne UNSELECT: erneutes EXAMINE); nie CLOSE, nie mailbox-weites EXPUNGE. Jede Referenz wird gegen UIDVALIDITY geprüft;
+  nicht mehr vorhandene Mails stehen in `missing`. Schreibvorgänge werden **nie** wiederholt: Bricht die Verbindung währenddessen ab,
+  kommt `outcome_unknown` (Audit-Ergebnis `unknown`).
+- **`set_flags`** → `{updated, missing}`: `seen`, `flagged`, `answered` und Keywords (`$Name`, Buchstaben/Ziffern/`_.-`, max. 64);
+  `\Deleted`, `\Draft`, `\Recent` und gleichnamige Keywords → `invalid_flag`; Keywords ohne `\*` in PERMANENTFLAGS → `keywords_not_supported`.
+- **`move` / `copy`** → `{moved|copied, target_folder, new_refs[], missing}`: MOVE, sonst COPY + `\Deleted` + UID EXPUNGE genau dieser UIDs
+  (nur mit UIDPLUS, sonst `move_unsupported`). Neue Referenzen aus COPYUID (getaggt oder ungetaggt); fehlt er, Abgleich über die Message-ID
+  in den neuesten Mails des Ziels, sonst `null` und Warnung `new_refs_incomplete`. Ziel = Quelle → `same_folder`.
+- **`mark_spam` / `mark_not_spam`**: Verschieben in den Spam-Ordner (ohne Zuordnung `no_junk_folder`) bzw. immer zurück in den Posteingang.
+  Ob GMX daraus lernt, ist unbestätigt.
+- **`create_folder`** (`name`, optional `parent`) → `{path}`; **`rename_folder`** (`path`, `new_name`) → `{path, previous_path}`.
+  Namensregeln und Schutz der Spezialordner: DECISIONS Nr. 40 (`invalid_folder_name`, `protected_folder`, `folder_exists`).
+- **`save_draft`** → `{ref, size}`: MIME-Nachricht (policy SMTP, eigene Message-ID, Absender = Konto), bei `in_reply_to_ref` „Re: “ sowie
+  In-Reply-To/References (max. 10). APPEND in den Entwürfe-Ordner mit `\Draft` und `\Seen`; größer als APPENDLIMIT → `message_too_large`;
+  Referenz aus APPENDUID oder per Message-ID. Adressen werden geprüft (`invalid_address`), aber **nicht** gegen die Allowlist – ein Entwurf
+  verschickt nichts (Senden erst M6).
+- **Audit-Log** (`audit.py`) und Ereignis `gmx_mail_action_executed` für alle schreibenden Aktionen: Zeit, Aktion, Stufe, Ergebnis
+  (`ok`/`error`/`unknown`), Anzahl, Ordner, Ziel, Fehlercode und ein Fingerabdruck der Parameter – keine Adressen, Betreffs oder Texte
+  (bei `save_draft` nur die Empfängerzahl). Aufbewahrung `audit_retention_days` (90), max. 5000 Einträge, Neustart-fest. `get_audit_log`
+  (Stufe R, `limit` 50, max. 200) liefert die neuesten zuerst. Validierungsfehler werden nicht protokolliert.
+- **Anhänge aufräumen** (`attachments.py`): Option `attachment_retention_days` (7; 0 = nie), täglich 03:17 und beim Start, nur Dateien
+  direkt in `<Medienordner>/gmx_mail/<entry_id>/`.
+- **IDLE-Korrektur:** nach `* BYE`/Verbindungsverlust kein DONE/LOGOUT mehr, sofortiger Reconnect (Dovecot-Test mit `doveadm kick`: ≈ 6 s).
+- **Manuelle GMX-Prüfung:** `tools/gmx_live_check.py` (Produktionscode, eigener Testordner, nur Metadaten): `\Recent` nach SELECT,
+  Teil-FETCH, COPYUID bei MOVE/COPY, Entwurf mit APPENDUID, IDLE-Push; mit `--idle-minutes 35` das BYE nach ≈ 30 min samt Reconnect.
+  Gegen Dovecot läuft es in der CI mit. Die Ergebnisse gegen GMX stehen noch aus (Lauf durch den Nutzer).
 
 ## 4. Sensoren, Ereignisse, Repairs, Diagnose
 
@@ -254,12 +286,12 @@ Die Allowlist ist die einzige harte technische Grenze gegen Datenabfluss; Token 
   Vorher `jgalea/mailbox-mcp`, `danieldotnl/ha-mailbox-mcp`, `dadalouis/Home-mail` sichten.
 - **M3:** Coordinator, IDLE, Sensoren, Events, Diagnostics, Repairs.
 - **M4:** Organisieren (Flags, move/copy, Ordner, Spam, Entwürfe) mit Limits und Audit-Log (`gmx_mail_action_executed`, `get_audit_log`).
-  Übernommene offene Punkte aus M2/M3 (Nutzerentscheidung 21.11.2026):
-  - Freigabe DECISIONS Nr. 32 (Filterregel-Hinweis als ignorierbare Warnung).
-  - Live-Prüfungen gegen GMX mit Testkonto (nur manuell, `tools/gmx_probe.py` erweitern): IDLE-Stabilität über Stunden,
-    Teil-FETCH-Antworten (`BODY.PEEK[x]<0.n>`), Verhalten von SELECT auf `\Recent`.
-  - Aufräumen gespeicherter Anhänge unter `<Medienordner>/gmx_mail/` (bisher M7).
-  - Dovecot mit kurzem Idle-Timeout, um den Reconnect gegen einen echten Server zu prüfen.
+  Übernommene offene Punkte aus M2/M3 (Nutzerentscheidung 21.11.2026), Stand nach Umsetzung:
+  - Freigabe DECISIONS Nr. 32 – erledigt.
+  - Live-Prüfungen gegen GMX mit Testkonto – Werkzeug fertig (`tools/gmx_live_check.py` statt Erweiterung von `gmx_probe.py`,
+    DECISIONS Nr. 45), **Lauf durch den Nutzer offen**.
+  - Aufräumen gespeicherter Anhänge – erledigt (DECISIONS Nr. 42).
+  - Reconnect gegen einen echten Server – erledigt per `doveadm kick` statt kurzem Idle-Timeout (DECISIONS Nr. 44).
   - Weiter offen (nicht M4): IMAP-Abschaltfrist bei GMX (Langzeitbeobachtung), Stundenlimit für Empfänger (M6).
 - **M5:** Löschen (`trash`, `delete_permanently` mit Token).
 - **M6:** Senden, Antworten, Weiterleiten mit Versand-Modus, Allowlist, Token und Gesendet-Strategie nach M0-Befund.

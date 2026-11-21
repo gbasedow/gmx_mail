@@ -461,7 +461,7 @@ class FakeIdleClient:
         return FakeResponse("OK")
 
     async def examine(self, mailbox: str = "INBOX") -> FakeResponse:
-        """EXAMINE - like aioimaplib 2.0.1 it does NOT enter the SELECTED state."""
+        """EXAMINE - like aioimaplib 2.0.3 it does NOT enter the SELECTED state."""
         return FakeResponse("OK")
 
     def has_capability(self, capability: str) -> bool:

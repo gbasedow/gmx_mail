@@ -41,7 +41,7 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
   `envelope.py` (24-KB-Budget, Cursor). Details: SPEC §3 „Umsetzung der Leseaktionen“.
   Prüfungen: 230 HA-Tests + 3 Servertests gegen GreenMail + 29 Probe-Tests grün, Coverage 98 %, ruff, mypy grün.
   Entscheidungen Nr. 18–24 freigegeben. Offen: Dovecot-Tests, Aufräumen gespeicherter Anhänge, Teil-FETCH bei GMX ungeprüft.
-- **M3-Umfang:** `client/idle.py` (IDLE-Watcher, aioimaplib 2.0.1, nur implizites TLS, SELECT statt EXAMINE – siehe DECISIONS Nr. 31),
+- **M3-Umfang:** `client/idle.py` (IDLE-Watcher, aioimaplib 2.0.3, nur implizites TLS, SELECT statt EXAMINE – siehe DECISIONS Nr. 31),
   `coordinator.py` (STATUS-Zähler, neue Mails über letzte UID, Ereignis `gmx_mail_new_message`, max. 20 je Aktualisierung),
   `sensor.py`, `binary_sensor.py`, `entity.py`, `counter.py` (Aktionen heute), `diagnostics.py`, Repairs `folder_mapping_ambiguous`,
   `uidvalidity_changed`, `server_rules_unavailable`. Details: SPEC §4 „Umsetzung M3“, Entscheidungen Nr. 25–32.

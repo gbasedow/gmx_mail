@@ -14,7 +14,7 @@
     "imapclient"
   ],
   "requirements": [
-    "aioimaplib==2.0.1",
+    "aioimaplib==2.0.3",
     "imapclient==4.3.0"
   ],
   "version": "0.3.0"

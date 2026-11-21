@@ -170,7 +170,7 @@ Abweichungen und Präzisierungen gegenüber der Tabelle oben (Begründung: `docs
 ### Umsetzung M3 (Stand 21.11.2026)
 
 Begründungen: `docs/DECISIONS.md` Nr. 25–32.
-- **IDLE-Watcher** (`client/idle.py`): `aioimaplib==2.0.1` (gleicher Pin wie Core-`imap`), nur bei implizitem TLS – aioimaplib kann kein
+- **IDLE-Watcher** (`client/idle.py`): `aioimaplib==2.0.3` (gleicher Pin wie Core-`imap`), nur bei implizitem TLS – aioimaplib kann kein
   STARTTLS; dann und ohne IDLE-Capability nur Abfrage (`push: unsupported`). Überwacht nur den Posteingang. Öffnet ihn mit SELECT, weil
   aioimaplib nach EXAMINE nicht in den Zustand SELECTED wechselt und IDLE ablehnt (GreenMail-Test); gesendet werden nur IDLE, DONE und
   LOGOUT. Erneuerung nach `idle_renew_minutes`; `* BYE` und Verbindungsabbruch (eigenes Signal, sofort) → Reconnect mit Backoff;

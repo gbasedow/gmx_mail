@@ -5,7 +5,7 @@
 * IDLE is renewed after ``renew_seconds`` (GMX drops idle connections after ~30 min, M0);
 * ``* BYE`` (e.g. ``* BYE timeout``) or a lost connection is a normal reason to reconnect, not an error state;
 * reconnects use the shared exponential backoff; a rejected login stops the watcher and reports it;
-* the folder is opened with SELECT: aioimaplib 2.0.1 only enters the SELECTED state (required for IDLE) after
+* the folder is opened with SELECT: aioimaplib 2.0.3 only enters the SELECTED state (required for IDLE) after
   ``select()``, not after ``examine()`` (found by the GreenMail test). The watcher still never changes anything:
   it only sends IDLE, DONE and LOGOUT - never CLOSE, STORE or EXPUNGE (LOGOUT does not expunge, RFC 3501).
   The only side effect of a read-write SELECT is that the server may clear ``\\Recent`` flags.

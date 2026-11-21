@@ -4,6 +4,6 @@
 pytest-homeassistant-custom-component==0.13.375
 imapclient==4.3.0
 # Same pin as the Home Assistant core integration `imap` (avoids version conflicts).
-aioimaplib==2.0.1
+aioimaplib==2.0.3
 ruff>=0.17
 mypy>=2.4

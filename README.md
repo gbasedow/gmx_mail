@@ -1,7 +1,7 @@
 # gmx_mail
 
 Home-Assistant-Custom-Integration für ein GMX-Postfach (IMAP/SMTP), gedacht für die Verwaltung des Postfachs
-durch Claude über den ha-mcp-Server. **Status: Meilenstein M2 (Leseaktionen) – noch keine schreibenden Aktionen, Sensoren oder IDLE.**
+durch Claude über den ha-mcp-Server. **Status: Meilenstein M3 (Leseaktionen, Sensoren, IDLE-Push, Ereignisse, Diagnose) – noch keine schreibenden Aktionen.**
 
 | Datei | Inhalt |
 |---|---|
@@ -23,3 +23,5 @@ durch Claude über den ha-mcp-Server. **Status: Meilenstein M2 (Leseaktionen) �
 
 Installation zum Testen (nur Staging): Ordner `custom_components/gmx_mail` nach `config/custom_components/` kopieren, Home Assistant
 neu starten, Integration „GMX Mail“ hinzufügen. Vorher im GMX-Webmailer POP3/IMAP einschalten und ein App-Passwort anlegen.
+
+Lizenz: MIT (siehe `LICENSE`).

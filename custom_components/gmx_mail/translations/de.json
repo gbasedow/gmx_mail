@@ -250,6 +250,18 @@
     "imap_possibly_disabled": {
       "title": "GMX-Anmeldung für {account} abgelehnt",
       "description": "GMX hat die Anmeldung abgelehnt. GMX schaltet den POP3/IMAP-Zugriff nach längerer Nichtnutzung automatisch ab und meldet dann denselben Fehler wie bei einem falschen Passwort.\n\n1. Im GMX-Webmailer anmelden.\n2. E-Mail-Einstellungen > POP3/IMAP öffnen und den POP3- und IMAP-Zugriff erlauben (GMX verlangt dabei eine Sicherheitsabfrage).\n3. Falls das App-Passwort gelöscht wurde, unter Account > Login & Sicherheit > App-Passwörter ein neues anlegen.\n4. Danach die Integration unter Einstellungen > Geräte & Dienste neu anmelden."
+    },
+    "uidvalidity_changed": {
+      "title": "Ordner auf dem Server neu aufgebaut für {account}",
+      "description": "Die UIDVALIDITY des Ordners {folder} hat sich geändert. Früher erhaltene Mail-Referenzen (folder, uid, uidvalidity) sind nicht mehr gültig; bitte erneut suchen. Für diese Änderung wurden keine Neue-Mail-Ereignisse gesendet."
+    },
+    "folder_mapping_ambiguous": {
+      "title": "Spezialordner mehrdeutig für {account}",
+      "description": "Für folgende Spezialordner kommen mehrere Ordner in Frage: {roles}. Der angezeigte Ordner wurde gewählt. Falls das falsch ist, den Ordner in den Optionen der Integration unter Spezialordner auswählen (zum Beispiel, wenn neben Gesendet ein alter Ordner Sent eines anderen Mailprogramms existiert)."
+    },
+    "server_rules_unavailable": {
+      "title": "GMX-Filterregeln nicht verwaltbar",
+      "description": "GMX bietet für die Filterregeln des Webmailers keine Schnittstelle (kein ManageSieve, per IMAP nicht sichtbar). Die Integration GMX Mail kann diese Regeln deshalb weder lesen noch ändern. Dieser Hinweis kann ignoriert werden."
     }
   },
   "services": {
@@ -424,6 +436,46 @@
         "config_entry_id": {
           "name": "Konto",
           "description": "Der GMX-Mail-Konfigurationseintrag."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "unseen_inbox": {
+        "name": "Ungelesen im Posteingang"
+      },
+      "junk_messages": {
+        "name": "Spam-Nachrichten"
+      },
+      "last_sync": {
+        "name": "Letzte Synchronisation"
+      },
+      "actions_today": {
+        "name": "Aktionen heute",
+        "state_attributes": {
+          "by_level": {
+            "name": "Nach Rechtestufe"
+          }
+        }
+      }
+    },
+    "binary_sensor": {
+      "connection": {
+        "name": "Verbindung",
+        "state_attributes": {
+          "push": {
+            "name": "Push (IDLE)",
+            "state": {
+              "disabled": "Ausgeschaltet",
+              "unsupported": "Nicht unterstützt",
+              "connecting": "Verbindet",
+              "connected": "Verbunden",
+              "reconnecting": "Verbindet neu",
+              "auth_failed": "Anmeldung abgelehnt",
+              "stopped": "Gestoppt"
+            }
+          }
         }
       }
     }

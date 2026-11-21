@@ -161,6 +161,31 @@ BACKOFF_MIN_S: Final = 5.0
 BACKOFF_MAX_S: Final = 15 * 60.0
 BACKOFF_JITTER: Final = 0.2  # +/- 20 %
 
+# --------------------------------------------------------------------------- push, polling, events (M3)
+
+IDLE_ACK_TIMEOUT_S: Final = 10.0
+IDLE_PUSH_GRACE_S: Final = 30.0  # extra wait beyond the renewal timer before assuming the connection hangs
+MAX_NEW_MESSAGE_EVENTS: Final = 20  # per update; more are counted but not announced (flood protection)
+REFRESH_COOLDOWN_S: Final = 5.0
+
+EVENT_NEW_MESSAGE: Final = "gmx_mail_new_message"
+
+
+class PushState(StrEnum):
+    """State of the IDLE watcher."""
+
+    DISABLED = "disabled"  # switched off in the options
+    UNSUPPORTED = "unsupported"  # no IDLE capability or STARTTLS (aioimaplib cannot do STARTTLS)
+    CONNECTING = "connecting"
+    CONNECTED = "connected"
+    RECONNECTING = "reconnecting"
+    AUTH_FAILED = "auth_failed"
+    STOPPED = "stopped"
+
+
 # --------------------------------------------------------------------------- repairs
 
 ISSUE_IMAP_POSSIBLY_DISABLED: Final = "imap_possibly_disabled"
+ISSUE_UIDVALIDITY_CHANGED: Final = "uidvalidity_changed"
+ISSUE_FOLDER_MAPPING_AMBIGUOUS: Final = "folder_mapping_ambiguous"
+ISSUE_SERVER_RULES_UNAVAILABLE: Final = "server_rules_unavailable"

@@ -19,8 +19,8 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
 
 ## 2. Status
 
-- Stand: 20.11.2026. **M1 und M2 (Leseaktionen) abgeschlossen und vom Nutzer freigegeben. Nächster Schritt: M3** (Coordinator, IDLE,
-  Sensoren, Ereignisse, Diagnose, Repairs) – erst nach Freigabe beginnen.
+- Stand: 21.11.2026. **M1 und M2 in `main`. M3 (Coordinator, IDLE, Sensoren, Ereignisse, Diagnose, Repairs) umgesetzt auf Branch
+  `claude/wizardly-gauss-af5crm`, Freigabe offen.**
   M0 (Live-Probe) ist abgeschlossen; Ergebnisse in `GMX-NOTES.md` (Spalte „Ergebnis“, Abschnitt 4) und `docs/probe-2026-11-20-v4.json`.
   Kern: keine Gesendet-Kopie per SMTP (→ `sent_copy_mode=append`), Suchindex ≈ 30 s verzögert, ruhende Verbindungen/IDLE nach ≈ 30 min
   getrennt (`* BYE timeout`), `COPYUID` bei MOVE ungetaggt (nur 1 Messpunkt), Probe v3d nutzt `UNSELECT` statt `CLOSE`.
@@ -31,8 +31,8 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
   `ConnectionLimiter` max. 2), `client/folders.py` (SPECIAL-USE → Heuristik → Override, Mehrdeutigkeit), `client/smtp.py` (nur Login-Check),
   Repair-Issue `imap_possibly_disabled`. (M1 enthielt noch keine Aktionen.)
 - Prüfungen: 107 Integrationstests + 29 Probe-Tests grün, Coverage 99 %, ruff, mypy (strict), hassfest (GitHub Action) grün.
-  **HACS-Validierung ungeprüft:** Die HACS-Action prüft nur öffentliche Repositories; der Job wird übersprungen, solange das Repo privat ist
-  (vom Nutzer so entschieden, DECISIONS Nr. 17). Vor einer Veröffentlichung über HACS das Repo öffentlich schalten und die Action prüfen. `pytest-homeassistant-custom-component` 0.13.375 bringt HA **2026.10.4** mit – für 2026.11 gibt es noch keine Version.
+  **HACS:** Das Repository ist seit 21.11.2026 öffentlich, die HACS-Action läuft wieder (Job wird nur bei privatem Repo übersprungen, DECISIONS Nr. 17).
+  Lizenz MIT ist eingecheckt; Beschreibung und Topics muss der Nutzer in den GitHub-Einstellungen setzen (DECISIONS Nr. 33). `pytest-homeassistant-custom-component` 0.13.375 bringt HA **2026.10.4** mit – für 2026.11 gibt es noch keine Version.
 - Entscheidungen aus M1: `docs/DECISIONS.md` Nr. 11–17, alle vom Nutzer freigegeben (Nr. 12: Limits frei wählbar, SPEC-Werte als Voreinstellung). Offen für M6: Stundenlimit für Empfänger (Drittquelle: 11 Empfänger/Stunde, unbestätigt).
 - **M2-Umfang:** Aktionen `list_folders`, `search`, `get_message`, `get_attachment`, `get_status` (`services.py`, nur Stufe R,
   `SupportsResponse.ONLY`); `client/reader.py` (EXAMINE/UNSELECT, `BODY.PEEK`, Indexverzögerungs-Fallback, SORT oder clientseitig),
@@ -41,6 +41,11 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
   `envelope.py` (24-KB-Budget, Cursor). Details: SPEC §3 „Umsetzung der Leseaktionen“.
   Prüfungen: 230 HA-Tests + 3 Servertests gegen GreenMail + 29 Probe-Tests grün, Coverage 98 %, ruff, mypy grün.
   Entscheidungen Nr. 18–24 freigegeben. Offen: Dovecot-Tests, Aufräumen gespeicherter Anhänge, Teil-FETCH bei GMX ungeprüft.
+- **M3-Umfang:** `client/idle.py` (IDLE-Watcher, aioimaplib 2.0.3, nur implizites TLS, SELECT statt EXAMINE – siehe DECISIONS Nr. 31),
+  `coordinator.py` (STATUS-Zähler, neue Mails über letzte UID, Ereignis `gmx_mail_new_message`, max. 20 je Aktualisierung),
+  `sensor.py`, `binary_sensor.py`, `entity.py`, `counter.py` (Aktionen heute), `diagnostics.py`, Repairs `folder_mapping_ambiguous`,
+  `uidvalidity_changed`, `server_rules_unavailable`. Details: SPEC §4 „Umsetzung M3“, Entscheidungen Nr. 25–32.
+  Prüfungen: 252 HA-Tests + 6 Servertests (GreenMail, inkl. IDLE mit echtem aioimaplib) + 29 Probe-Tests grün, Coverage 98 %, ruff, mypy grün.
 - Repo-Sichtung aus Abschnitt 10 erledigt: `docs/REVIEW-REPOS-2026-11-20.md`.
 - **Noch offen:** IMAP-Abschaltfrist (Langzeitbeobachtung).
 - Alle Annahmen, die in `GMX-NOTES.md` als `U` (unbestätigt) oder `LIVE` markiert sind, nicht als Fakt behandeln.
@@ -129,7 +134,7 @@ docker compose up -d greenmail && pytest -q -p no:homeassistant -m integration t
 ruff check . && ruff format --check .
 mypy custom_components/gmx_mail
 # hassfest + HACS-Validierung laufen als GitHub Actions (.github/workflows/validate.yml)
-# HACS-Action prüft nur öffentliche Repos: solange gmx_mail privat ist, wird der Job übersprungen (HACS ungeprüft)
+# HACS-Action prüft nur öffentliche Repos (bei privatem Repo wird der Job übersprungen)
 GMX_USER=... GMX_PASS=... python3 tools/gmx_probe.py   # nur manuell, Test-Konto
 ```
 

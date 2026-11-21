@@ -36,7 +36,7 @@ async def test_setup_and_unload(hass: HomeAssistant, config_entry: MockConfigEnt
     assert data.server_info.append_limit == 29360128
     assert data.folder_map.get(FolderRole.TRASH) == "Gelöscht"
     assert data.folder_map.get(FolderRole.JUNK) == "Spamverdacht"
-    assert data.limiter.in_use == 1
+    assert data.limiter.in_use == 2  # work connection + IDLE watcher
     assert len(imap_server.open_clients) == 1
 
     assert await hass.config_entries.async_unload(config_entry.entry_id)
@@ -104,7 +104,7 @@ async def test_idle_connection_is_closed_by_timer(
     await hass.async_block_till_done()
     assert not worker.connected
     assert imap_server.clients[0].logged_out
-    assert config_entry.runtime_data.limiter.in_use == 0
+    assert config_entry.runtime_data.limiter.in_use == 1  # only the IDLE connection remains
 
 
 async def test_auth_failure_during_operation_starts_reauth(
@@ -160,4 +160,4 @@ async def test_read_survives_dropped_connection(hass: HomeAssistant, config_entr
 
     assert await worker.async_run(read, readonly=True) == 6
     assert len(imap_server.clients) == 2
-    assert config_entry.runtime_data.limiter.in_use == 1
+    assert config_entry.runtime_data.limiter.in_use == 2

@@ -167,6 +167,27 @@ Abweichungen und Präzisierungen gegenüber der Tabelle oben (Begründung: `docs
 - **Diagnostics:** `async_redact_data` für Passwort, Benutzer, Adressen, Betreffs. Ausgegeben werden Capabilities, Ordner-Map, Zähler,
   letzte Fehlercodes und Options ohne Allowlist-Adressen (nur deren Anzahl).
 
+### Umsetzung M3 (Stand 21.11.2026)
+
+Begründungen: `docs/DECISIONS.md` Nr. 25–32.
+- **IDLE-Watcher** (`client/idle.py`): `aioimaplib>=2.0.3` (Mindestversion; HA-Core pinnt 2.0.3, hassfest verlangt `>=`), nur bei implizitem TLS – aioimaplib kann kein
+  STARTTLS; dann und ohne IDLE-Capability nur Abfrage (`push: unsupported`). Überwacht nur den Posteingang. Öffnet ihn mit SELECT, weil
+  aioimaplib nach EXAMINE nicht in den Zustand SELECTED wechselt und IDLE ablehnt (GreenMail-Test); gesendet werden nur IDLE, DONE und
+  LOGOUT. Erneuerung nach `idle_renew_minutes`; `* BYE` und Verbindungsabbruch (eigenes Signal, sofort) → Reconnect mit Backoff;
+  abgelehnter Login → Reauth + Repair, Watcher endet. Belegt die zweite Verbindung im `ConnectionLimiter`.
+- **Coordinator** (`coordinator.py`): alle `poll_interval` Sekunden und nach jeder IDLE-Meldung (Debounce 5 s) STATUS des Posteingangs
+  (MESSAGES, UNSEEN, UIDNEXT, UIDVALIDITY) und des Spam-Ordners (MESSAGES). Neue Mails = UIDs über der letzten gesehenen UID (per `Store`
+  gespeichert, damit Mails während eines Neustarts gemeldet werden). Erster Start und UIDVALIDITY-Wechsel setzen nur die Basis
+  (keine Ereignisse; bei Wechsel Repair `uidvalidity_changed`). Höchstens 20 Ereignisse je Aktualisierung (die neuesten), der Rest wird gezählt.
+- **Ereignis** `gmx_mail_new_message`: `{entry_id, folder, ref}`; `from`/`subject` nur mit `event_include_headers`.
+- **Entitäten** (Gerät je Konto, Typ Dienst): Sensoren „Ungelesen im Posteingang“, „Spam-Nachrichten“ (nicht verfügbar ohne Spam-Ordner),
+  „Letzte Synchronisation“ und „Aktionen heute“ (Diagnose; alle Aktionen je lokalem Tag, Attribut `by_level`, Reset um Mitternacht);
+  Binärsensor „Verbindung“ (Diagnose, Attribut `push`). `get_status` liefert `push_state`, `idle_active`, `last_sync`, `limits_used`.
+- **Repairs:** `folder_mapping_ambiguous` (Platzhalter `roles`), `uidvalidity_changed`, `server_rules_unavailable` (Warnung, vom Nutzer
+  ignorierbar; HA kennt keine Info-Stufe). `smtp_auth_failed` folgt in M6 (vorher kein SMTP-Login im Betrieb).
+- **Diagnose:** Daten ohne Adresse, Passwort, Titel und Unique-ID; Allowlist nur als Anzahl; Zähler, Push- und Verbindungsstatus.
+- **Nicht in M3:** `gmx_mail_action_executed` und Audit-Log (M4), eigener Heartbeat gegen die IMAP-Abschaltung (nicht vorgesehen).
+
 ## 5. Sicherheit
 
 ### Bedrohungsmodell

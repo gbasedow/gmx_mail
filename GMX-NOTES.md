@@ -47,6 +47,7 @@ wurde nicht gefunden. „Vollständiges Management“ bedeutet hier: alles, was 
 | 33 | Teil-FETCH | `BODY.PEEK[1]<0.n>` wird korrekt beantwortet und von imapclient gelesen (anders als GreenMail). | Live-Check 21.11.2026 | – | ✔ | Rückfall auf ganzen Teil bleibt für andere Server. |
 | 34 | `\Recent` | Ein Read-Write-SELECT (IDLE-Verbindung der Integration) löscht `\Recent` auch für andere Sitzungen (STATUS RECENT 3 → 0). | Live-Check 21.11.2026 | – | ✔ | Integration nutzt `\Recent` nicht; Nebenwirkung nur für fremde Clients, die neue Mails über `\Recent` erkennen (selten). |
 | 35 | IDLE-Push / Entwurf | Push nach APPEND in den Posteingang nach ≈ 10 s; APPEND in `Entwürfe` mit APPENDUID; eigene Keywords per STORE. | Live-Check 21.11.2026 | – | ✔ | 10 s Verzögerung ist GMX-seitig; Coordinator-Debounce (5 s) kommt hinzu. |
+| 36 | SEARCH nach Message-ID | `SEARCH HEADER Message-ID <Teil>` fand die ≈ 2 min zuvor per APPEND abgelegte Mail nicht (3 Läufe). Ursache unklar: Header nicht im Suchindex oder Verzögerung > 2 min. | Live-Check 21.11.2026 | – | U | Integration sucht Message-IDs nur per FETCH der Header, nie per SEARCH; das Prüfskript ebenso (seit 21.11.2026). |
 
 ### Widersprüche zwischen Quellen (nicht aufgelöst)
 
@@ -115,7 +116,10 @@ Manuelle Zusatztests (nicht vom Skript abgedeckt):
 - Lauf 3 (`docs/probe-2026-11-20-v4.json`): SMTP legt **keine** Gesendet-Kopie an (Zeile 22); `MOVE` in `Gelöscht` funktioniert (Zeile 16); Aufräumen sauber.
 - Live-Check M4 (21.11.2026, `tools/gmx_live_check.py`, Testkonto FreeMail, Python 3.15, Ergebnis `docs/live-check-2026-11-21.json`):
   Teil-FETCH ok (Zeile 33), COPYUID bei MOVE und COPY (Zeile 28), SELECT löscht `\Recent` (Zeile 34), Push ≈ 10 s, Entwurf mit APPENDUID (Zeile 35),
-  Aufräumen sauber. Der 35-Minuten-Lauf (BYE und Reconnect mit dem Code der Integration) steht noch aus.
+  Aufräumen der Ordner und Entwürfe sauber; die Testmail im Posteingang blieb liegen (Zeile 36, Skriptfehler, behoben).
+  Der 35-Minuten-Lauf brach am Ende ab: Die ungenutzte Arbeitsverbindung des Skripts war nach ≈ 30 min getrennt (Zeile 32),
+  Aufräumen und Abmelden liefen über die tote Verbindung. Behoben: Arbeitsverbindung wird vor der Wartezeit geschlossen,
+  Aufräumen über eine neue Verbindung; `--cleanup-only` entfernt Reste früherer Läufe. Wiederholung steht aus.
 - Noch offen: Dauer der IMAP-Abschaltung (Langzeitbeobachtung). Expunge im Papierkorb bleibt ungetestet; v1 löscht standardmäßig nie dauerhaft.
 
 ### Ergebnisfeld (Vorlage für Folgeläufe)

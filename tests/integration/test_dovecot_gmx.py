@@ -371,30 +371,86 @@ async def test_idle_reconnects_after_server_disconnect() -> None:
         cleaner.logout()
 
 
-def test_live_check_tool_runs_against_gmx_like_server() -> None:
-    """tools/gmx_live_check.py (manual GMX check) works end to end and cleans up after itself."""
+def _live_check(*extra: str, kick_after: float | None = None) -> dict[str, Any]:
+    """Run tools/gmx_live_check.py against Dovecot; optionally disconnect all sessions server-side after ``kick_after`` s."""
     import json  # noqa: PLC0415
     import sys  # noqa: PLC0415
 
     root = Path(__file__).parent.parent.parent
     env = {**os.environ, "GMX_USER": USER, "GMX_PASS": PASSWORD}
-    args = ["--host", HOST, "--port", str(IMAPS_PORT), "--cafile", str(CA_FILE), "--idle-minutes", "0.1"]
-    done = subprocess.run(
-        [sys.executable, str(root / "tools" / "gmx_live_check.py"), *args], env=env, capture_output=True, timeout=90, check=False
+    args = ["--host", HOST, "--port", str(IMAPS_PORT), "--cafile", str(CA_FILE), *extra]
+    process = subprocess.Popen(
+        [sys.executable, str(root / "tools" / "gmx_live_check.py"), *args], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
-    assert done.returncode == 0, done.stderr.decode()[-2000:]
-    report = json.loads(done.stdout)
+    if kick_after is not None:
+        time.sleep(kick_after)
+        assert _kick(), "doveadm kick failed"
+    stdout, stderr = process.communicate(timeout=120)
+    assert process.returncode == 0, stderr.decode()[-2000:]
+    assert USER not in stdout.decode() and PASSWORD not in stdout.decode()  # metadata only
+    report: dict[str, Any] = json.loads(stdout)
+    return report
+
+
+def _no_live_check_leftovers() -> None:
+    client = _fresh()
+    try:
+        assert not [f for f in client.list_folders() if f[2].startswith("HA-Live")]
+        for folder in ("INBOX", "Entwürfe"):
+            client.select_folder(folder, readonly=True)
+            uids = client.search(["ALL"])
+            headers = client.fetch(uids, ["BODY.PEEK[HEADER.FIELDS (MESSAGE-ID SUBJECT)]"]) if uids else {}
+            text = b"".join(v for item in headers.values() for k, v in item.items() if k.startswith(b"BODY"))
+            assert b"gmx-mail-live-check" not in text and b"gmx_mail live check draft" not in text
+            client.unselect_folder()
+    finally:
+        client.logout()
+
+
+def test_live_check_tool_survives_a_dropped_connection() -> None:
+    """The manual GMX check works end to end, and a server-side disconnect during the IDLE wait (GMX drops idle
+    connections after ~30 min) neither crashes it nor leaves test data behind (found in the 35-minute run on 21.11.2026)."""
+    report = _live_check("--idle-minutes", "0.4", kick_after=12)
+    assert "aborted" not in report
     assert report["partial_fetch"] == "parsed"
     assert report["recent_after_select"]["cleared_by_select"]  # Dovecot: SELECT takes \Recent away from others
     assert report["copy"]["new_refs_known"] and report["move"]["via_copyuid"]
     assert report["draft"] == {"ref_known": True, "size": report["draft"]["size"], "folder_role_ok": True}
     assert report["idle"]["connected"] and report["idle"]["push_delay_s"] is not None
-    assert report["cleanup"] == {"ok": True, "errors": []}
-    assert USER not in done.stdout.decode() and PASSWORD not in done.stdout.decode()  # metadata only
-    client = _fresh()
+    assert report["idle"]["reconnects"] >= 1  # the kick was noticed and the watcher reconnected
+    assert report["cleanup"] == {"ok": True, "errors": [], "folders_deleted": 2, "inbox_deleted": 1, "drafts_deleted": 1}
+    _no_live_check_leftovers()
+
+
+def test_live_check_cleanup_only_removes_just_its_own_leftovers(mailer: IMAPClient) -> None:
+    """--cleanup-only removes leftovers of earlier runs and nothing else (matching by headers, not by SEARCH)."""
+
+    def message(message_id: str, subject: str) -> bytes:
+        return f"From: {USER}\r\nTo: {USER}\r\nSubject: {subject}\r\nMessage-ID: {message_id}\r\n\r\nText\r\n".encode()
+
+    mailer.create_folder("HA-Live-0123456789")
+    mailer.create_folder("HA-Live-0123456789/Ziel")
+    mailer.append("INBOX", message("<0123456789-99@gmx-mail-live-check>", "gmx_mail live check 99"))
+    mailer.append("INBOX", message("<keep-inbox@example.org>", "gmx_mail live check 99"))  # same subject, foreign Message-ID
+    mailer.append("Entwürfe", message("<d1@gmx.test>", "gmx_mail live check draft"), flags=[b"\\Draft"])
+    mailer.append("Entwürfe", message("<keep-draft@gmx.test>", "gmx_mail live check draft"))  # not flagged \Draft
     try:
-        assert not [f for f in client.list_folders() if f[2].startswith("HA-Live")]
-        client.select_folder("INBOX", readonly=True)
-        assert client.search(["HEADER", "Message-ID", "gmx-mail-live-check"]) == []
+        report = _live_check("--cleanup-only")["cleanup_only"]
+        assert report == {"ok": True, "errors": [], "folders_deleted": 2, "inbox_deleted": 1, "drafts_deleted": 1}
+        for folder, kept in (("INBOX", b"keep-inbox@example.org"), ("Entwürfe", b"keep-draft@gmx.test")):
+            mailer.select_folder(folder, readonly=True)
+            found = mailer.fetch(mailer.search(["ALL"]), ["BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)]"])
+            ids = b"".join(v for item in found.values() for k, v in item.items() if k.startswith(b"BODY"))
+            assert kept in ids and b"gmx-mail-live-check" not in ids and b"<d1@gmx.test>" not in ids
+            mailer.unselect_folder()
     finally:
-        client.logout()
+        for folder, kept in (("INBOX", "keep-inbox@example.org"), ("Entwürfe", "keep-draft@gmx.test")):
+            mailer.select_folder(folder)
+            own = mailer.search(["HEADER", "Message-ID", kept])
+            if own:
+                mailer.add_flags(own, [b"\\Deleted"])
+                mailer.uid_expunge(own)
+            mailer.unselect_folder()
+        for path in ("HA-Live-0123456789/Ziel", "HA-Live-0123456789"):
+            with contextlib.suppress(Exception):
+                mailer.delete_folder(path)

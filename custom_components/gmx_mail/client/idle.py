@@ -26,6 +26,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
 from aioimaplib import IMAP4, STOP_WAIT_SERVER_PUSH, AioImapException
+from imapclient import imap_utf7
 
 from ..const import CONNECT_TIMEOUT_S, IDLE_ACK_TIMEOUT_S, IDLE_PUSH_GRACE_S, PushState
 from .errors import GmxAuthError, GmxConnectionError, GmxConnectionLimitError
@@ -77,6 +78,16 @@ def create_idle_client(settings: ImapSettings, context: ssl.SSLContext, on_lost:
     """
     client: IdleClient = IMAP4(host=settings.host, port=settings.port, timeout=CONNECT_TIMEOUT_S, conn_lost_cb=on_lost, ssl_context=context)
     return client
+
+
+def mailbox_argument(name: str) -> str:
+    """Return ``name`` as IMAP command argument: modified UTF-7 (RFC 3501 5.1.3), quoted.
+
+    aioimaplib puts the mailbox into the command line unchanged; without this, names with umlauts
+    (e.g. ``Entwürfe``) or spaces would be rejected by the server.
+    """
+    encoded: str = bytes(imap_utf7.encode(name)).decode("ascii")
+    return '"' + encoded.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
 class _IdleUnsupportedError(Exception):
@@ -197,7 +208,7 @@ class IdleWatcher:
             raise GmxAuthError("IDLE login rejected")
         if not client.has_capability("IDLE"):
             raise _IdleUnsupportedError("server does not offer IDLE")
-        response = await client.select(self._folder)
+        response = await client.select(mailbox_argument(self._folder))
         if _result(response) != "OK":
             raise GmxConnectionError("folder cannot be selected")
 

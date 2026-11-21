@@ -94,7 +94,7 @@ async def test_connects_examines_and_reports_changes(server: FakeIdleServer) -> 
     harness.start()
     await harness.until(lambda: harness.watcher.connected and harness.client().pending_idle)
     client = harness.client()
-    assert client.selected == ["INBOX"]
+    assert client.selected == ['"INBOX"']
     assert harness.changes == 1  # catch-up after connecting
     assert harness.limiter.in_use == 1
 
@@ -204,3 +204,12 @@ async def test_respects_connection_limit(server: FakeIdleServer) -> None:
     assert server.clients == []
     assert harness.watcher.last_error == "GmxConnectionLimitError"
     await harness.stop()
+
+
+def test_mailbox_argument_encoding() -> None:
+    """aioimaplib sends mailbox names unchanged, so they are encoded (modified UTF-7) and quoted here."""
+    from custom_components.gmx_mail.client.idle import mailbox_argument  # noqa: PLC0415
+
+    assert mailbox_argument("INBOX") == '"INBOX"'
+    assert mailbox_argument("Entwürfe") == '"Entw&APw-rfe"'  # as measured against GMX (GMX-NOTES row 15)
+    assert mailbox_argument('A "B" \\C') == '"A \\"B\\" \\\\C"'

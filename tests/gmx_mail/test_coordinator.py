@@ -173,7 +173,7 @@ async def test_idle_push_triggers_refresh(
     await setup_entry(hass, config_entry)
     await idle_server.started.wait()
     client = idle_server.clients[-1]
-    assert client.selected == ["INBOX"]
+    assert client.selected == ['"INBOX"']
     mailbox.mailbox("INBOX").messages[8] = plain_message()
     client.push(b"4 EXISTS")
     await settle(hass)

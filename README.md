@@ -1,7 +1,7 @@
 # gmx_mail
 
 Home-Assistant-Custom-Integration für ein GMX-Postfach (IMAP/SMTP), gedacht für die Verwaltung des Postfachs
-durch Claude über den ha-mcp-Server. **Status: Meilenstein M4 (Lesen, Sensoren, IDLE-Push, Ereignisse, Diagnose, Organisieren mit Audit-Log) – noch kein Löschen und kein Versand.**
+durch Claude über den ha-mcp-Server. **Status: Meilenstein M5 (Lesen, Sensoren, IDLE-Push, Ereignisse, Diagnose, Organisieren mit Audit-Log, Löschen mit Bestätigungscode) – noch kein Versand.**
 
 | Datei | Inhalt |
 |---|---|

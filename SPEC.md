@@ -104,8 +104,8 @@ Lesen: `SupportsResponse.ONLY`; Schreiben: `SupportsResponse.OPTIONAL`.
 | `mark_spam` / `mark_not_spam` | `refs[]` | `{moved:n}` | O | verschiebt nach/aus Junk; Wirkung auf GMX-Lernfilter unbestätigt |
 | `create_folder` / `rename_folder` | `name`/`path`, `parent` | `{path}` bzw. `{path, previous_path}` | O | Spezialordner nicht umbenennbar |
 | `save_draft` | `to, cc, bcc, subject, body_text, body_html?, in_reply_to_ref?` | `{ref, size}` | O | APPEND mit `\Draft`; Gesamtgröße <= `APPENDLIMIT` (GMX: 29 360 128 B), sonst `message_too_large` |
-| `trash` | `refs[]` | `{trashed:n}` | D | in den Papierkorb verschieben; max. 50 je Aufruf, max. 200 je Tag |
-| `delete_permanently` | `refs[]`, `confirm_token?` | ohne Token: `{preview, confirm_token, expires_in:300}`; mit Token: `{deleted:n}` | D + Option `allow_permanent_delete` | `\Deleted` + UID EXPUNGE; ohne UIDPLUS verweigert |
+| `trash` | `refs[]` | `{trashed, trash_folder, new_refs[], missing}` | D | in den Papierkorb verschieben; max. 50 je Aufruf, max. 200 je Tag; nicht für Mails im Papierkorb |
+| `delete_permanently` | `refs[]`, `confirm_token?` | ohne Token: `{preview, confirm_token, expires_in:300}`; mit Token: `{deleted:n}` | D + Option `allow_permanent_delete` | nur Papierkorb/Spam; `\Deleted` + UID EXPUNGE; ohne UIDPLUS verweigert |
 | `delete_folder` | `path`, `confirm_token?` | wie oben | D | nur leere Ordner, nie Spezialordner |
 | `send_message` | `to[], cc[], bcc[], subject, body_text, body_html?, attachments[paths]?, confirm_token?` | ohne Token: Vorschau + Token; mit Token: `{message_id, sent_copy:"appended"\|"server"\|"none"}` (Normalfall `appended`; `server` nur bei `sent_copy_mode=auto`, wenn GMX doch eine Kopie anlegt) | S | Versand-Modus + Allowlist; max. 10 Empfänger, max. 20 Mails/Tag; Anhänge nur aus `/media/gmx_mail/outbox`; Größe <= SMTP-`SIZE` und (für die Gesendet-Kopie) <= `APPENDLIMIT`, sonst `message_too_large` vor dem Versand |
 | `reply` | `ref, body_text, reply_all`(false), `quote`(true), `confirm_token?` | wie oben | S | setzt `\Answered`; In-Reply-To/References; Ziel nur bei Allowlist-Treffer oder Option `allow_reply_to_sender` |
@@ -184,6 +184,30 @@ Begründungen: `docs/DECISIONS.md` Nr. 37–45.
 - **Manuelle GMX-Prüfung:** `tools/gmx_live_check.py` (Produktionscode, eigener Testordner, nur Metadaten): `\Recent` nach SELECT,
   Teil-FETCH, COPYUID bei MOVE/COPY, Entwurf mit APPENDUID, IDLE-Push; mit `--idle-minutes 35` das BYE nach ≈ 30 min samt Reconnect.
   Gegen Dovecot läuft es in der CI mit. Lauf gegen GMX am 21.11.2026: alles bestanden (GMX-NOTES Zeilen 28, 33–37), auch der 35-Minuten-Lauf: Die Erneuerung nach 24 min hält die Push-Verbindung ohne Trennung.
+
+### Umsetzung M5 – Löschen (Stand 21.11.2026)
+
+Begründungen: `docs/DECISIONS.md` Nr. 46–53.
+- **Allgemein** (`services.py`, `client/deleter.py`, `confirm.py`): Stufe D, `SupportsResponse.OPTIONAL`, max. 50 Referenzen je Aufruf,
+  Tageslimit `max_delete_per_day` (Voreinstellung 200; zählt Papierkorb **und** endgültiges Löschen, übersteht Neustart und Reload).
+  Schreibvorgänge werden nie wiederholt (`outcome_unknown`). Audit-Log mit `ok`, `preview`, `rejected`, `error`, `unknown`.
+- **`trash`** → `{trashed, trash_folder, new_refs[], missing}`: MOVE in den Papierkorb (umkehrbar mit `move`); Mails im Papierkorb → `already_in_trash`;
+  ohne Papierkorb-Zuordnung → `no_trash_folder`.
+- **`delete_permanently`** (zusätzlich Option `allow_permanent_delete`, sonst `permanent_delete_disabled`): nur Papierkorb oder Spam-Ordner
+  (`not_in_trash_or_junk`), nur mit UIDPLUS (`uidplus_required`).
+  - Ohne `confirm_token`: `{preview: {count, folders, messages[≤10: ref, date, from, subject], more, missing}, confirm_token, expires_in: 300}`;
+    nichts wird geändert (EXAMINE).
+  - Mit Code: `\Deleted` + `UID EXPUNGE` genau dieser UIDs → `{deleted, missing}`; anschließend Kontrolle, ob sie weg sind (sonst Warnung `not_expunged`).
+    Fremde `\Deleted`-Mails im selben Ordner bleiben unberührt.
+- **`delete_folder`**: Vorschau `{preview: {path, messages: 0}, confirm_token, expires_in}`, dann `{deleted_folder}`; nur leer
+  (`folder_not_empty`), ohne Unterordner (`folder_has_children`), nie INBOX/Spezialordner (`protected_folder`).
+- **Bestätigungscode:** an Konto, Aktion und genau die Parameter gebunden (Referenzen sortiert), 5 min, einmal; Schlüssel nur im Speicher
+  (nach Neustart/Reload neue Vorschau nötig) → sonst `confirm_token_invalid`. Erzwingt einen Zwischenschritt, ist aber **keine** Garantie für
+  eine menschliche Freigabe; dafür ha-mcp „Tool Security Policies (user approval)“ für `ha_call_service` einrichten.
+- **`get_status`:** `limits_used.deleted_today`. Der Sensor „Aktionen heute“ zeigt die Stufe `delete` getrennt.
+- **Speichern beim Entladen:** Zähler, Audit-Log und letzte UID (DECISIONS Nr. 53).
+- **Live-Prüfung:** `tools/gmx_live_check.py` prüft den Löschweg mit einer eigenen Testmail (Abschnitt `delete` im Bericht); das Aufräumen
+  durchsucht auch den Papierkorb. Ergebnis gegen GMX steht aus (Lauf durch den Nutzer).
 
 ## 4. Sensoren, Ereignisse, Repairs, Diagnose
 
@@ -293,7 +317,7 @@ Die Allowlist ist die einzige harte technische Grenze gegen Datenabfluss; Token 
   - Aufräumen gespeicherter Anhänge – erledigt (DECISIONS Nr. 42).
   - Reconnect gegen einen echten Server – erledigt per `doveadm kick` statt kurzem Idle-Timeout (DECISIONS Nr. 44).
   - Weiter offen (nicht M4): IMAP-Abschaltfrist bei GMX (Langzeitbeobachtung), Stundenlimit für Empfänger (M6).
-- **M5:** Löschen (`trash`, `delete_permanently` mit Token).
+- **M5:** Löschen (`trash`, `delete_permanently` mit Token, `delete_folder`) – umgesetzt 21.11.2026, siehe §3 „Umsetzung M5“.
 - **M6:** Senden, Antworten, Weiterleiten mit Versand-Modus, Allowlist, Token und Gesendet-Strategie nach M0-Befund.
 - **M7:** Härtung (Injection-Korpus, Fuzzing des MIME-Parsers), Doku, HACS-Release, ha-mcp-Ende-zu-Ende-Test auf Staging.
   (Ein Staging-Test mit echtem HA 2026.11.2 im Container über die HA-APIs läuft seit 21.11.2026 in der CI, `tests/staging`;
@@ -308,7 +332,7 @@ Nach jeder Etappe: Tests grün, Kurzbericht, Freigabe abwarten.
 - **APPENDLIMIT** 29360128 B (≈ 28 MiB) begrenzt Entwürfe/APPEND; `save_draft` und Anhänge darauf prüfen.
 - **COPYUID bei MOVE:** ungetaggt, aber nur durch einen Messpunkt belegt (Lauf 3, `trash_move`; der zweite Messwert war wegen eines
   imaplib-Effekts nicht aussagekräftig). Implementierung muss beide Varianten und das Fehlen verkraften.
-- **Expunge im Papierkorb** ungetestet (v1 löscht standardmäßig nie dauerhaft; vor M5 live prüfen).
+- **Expunge im Papierkorb** gegen Dovecot geprüft; gegen GMX mit `tools/gmx_live_check.py` (Abschnitt `delete`) noch zu prüfen.
 - **Gesendet-Kopie (erledigt):** GMX legt per SMTP keine an (M0, Lauf 3) → `sent_copy_mode` Standard `append` (APPEND mit `\Seen` in den `\Sent`-Ordner, Message-ID der gesendeten Mail verwenden); `auto` prüft vorher per Header-Abgleich, `none` schaltet ab. Duplikate möglich, falls GMX das Verhalten ändert.
 - **Versandlimits** dynamisch und unveröffentlicht; Massentests können eine Kontosperre auslösen.
 - **SEARCH:** Indexverzögerung ≈ 30 s bei neuen Mails (M0, Lauf 2); Umlaut-Suche im Bestand noch nicht mit echten Mails geprüft.

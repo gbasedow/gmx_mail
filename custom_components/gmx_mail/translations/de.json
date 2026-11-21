@@ -129,10 +129,12 @@
             "name": "Datenschutz und Audit",
             "data": {
               "event_include_headers": "Absender und Betreff in Ereignisse aufnehmen",
-              "audit_retention_days": "Audit-Protokoll aufbewahren für"
+              "audit_retention_days": "Audit-Protokoll aufbewahren für",
+              "attachment_retention_days": "Gespeicherte Anhänge löschen nach"
             },
             "data_description": {
-              "event_include_headers": "Ereignisdaten landen in Logbuch und Recorder und können einen KI-Assistenten erreichen."
+              "event_include_headers": "Ereignisdaten landen in Logbuch und Recorder und können einen KI-Assistenten erreichen.",
+              "attachment_retention_days": "Von get_attachment gespeicherte Anhänge werden nach so vielen Tagen gelöscht (nur im eigenen Ordner der Integration). 0 = behalten."
             }
           }
         }
@@ -244,6 +246,42 @@
     },
     "html_output_disabled": {
       "message": "Die HTML-Ausgabe ist in den Optionen dieses Kontos nicht freigegeben."
+    },
+    "outcome_unknown": {
+      "message": "Die Verbindung ist während einer schreibenden Aktion abgebrochen. Ob der Server sie ausgeführt hat, ist unbekannt; bitte das Postfach prüfen, bevor die Aktion wiederholt wird."
+    },
+    "folder_exists": {
+      "message": "Ein Ordner mit diesem Namen existiert bereits."
+    },
+    "protected_folder": {
+      "message": "Posteingang und Spezialordner können nicht umbenannt werden und erhalten keine Unterordner."
+    },
+    "message_too_large": {
+      "message": "Die Nachricht ist größer als der Server erlaubt (bei GMX etwa 28 MB)."
+    },
+    "move_unsupported": {
+      "message": "Der Server unterstützt weder MOVE noch UIDPLUS; Verschieben ist ohne Löschen anderer Nachrichten nicht möglich."
+    },
+    "keywords_not_supported": {
+      "message": "Der Ordner erlaubt keine eigenen Schlüsselwörter."
+    },
+    "invalid_folder_name": {
+      "message": "Ungültiger Ordnername (leer, zu lang oder mit /, % oder *)."
+    },
+    "same_folder": {
+      "message": "Quell- und Zielordner sind gleich."
+    },
+    "no_flags": {
+      "message": "Mindestens eine Markierung zum Setzen oder Entfernen angeben."
+    },
+    "invalid_flag": {
+      "message": "Erlaubt sind nur seen, flagged, answered und eigene Schlüsselwörter (Buchstaben, Ziffern, _ . - und optional ein führendes $)."
+    },
+    "no_junk_folder": {
+      "message": "Für dieses Konto wurde kein Spam-Ordner gefunden."
+    },
+    "invalid_address": {
+      "message": "Eine Adresse ist ungültig."
     }
   },
   "issues": {
@@ -436,6 +474,180 @@
         "config_entry_id": {
           "name": "Konto",
           "description": "Der GMX-Mail-Konfigurationseintrag."
+        }
+      }
+    },
+    "get_audit_log": {
+      "name": "Audit-Protokoll abrufen",
+      "description": "Liefert die zuletzt ausgeführten schreibenden Aktionen (Zeit, Aktion, Anzahl, Ordner, Ergebnis) ohne Mailinhalte.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Der GMX-Mail-Konfigurationseintrag."
+        },
+        "limit": {
+          "name": "Anzahl",
+          "description": "Anzahl der Einträge (1–200)."
+        }
+      }
+    },
+    "set_flags": {
+      "name": "Markierungen setzen",
+      "description": "Setzt oder entfernt Markierungen: gelesen, Fähnchen, beantwortet und eigene Schlüsselwörter wie $Steuer. Löschmarkierungen sind hier nicht möglich.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Der GMX-Mail-Konfigurationseintrag."
+        },
+        "refs": {
+          "name": "Nachrichten",
+          "description": "Liste von Mail-Referenzen (folder, uid, uidvalidity), höchstens 100."
+        },
+        "add": {
+          "name": "Setzen",
+          "description": "Markierungen, die gesetzt werden, z. B. seen, flagged, $Steuer."
+        },
+        "remove": {
+          "name": "Entfernen",
+          "description": "Markierungen, die entfernt werden."
+        }
+      }
+    },
+    "move": {
+      "name": "Nachrichten verschieben",
+      "description": "Verschiebt Nachrichten in einen anderen Ordner und liefert ihre neuen Referenzen.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Der GMX-Mail-Konfigurationseintrag."
+        },
+        "refs": {
+          "name": "Nachrichten",
+          "description": "Liste von Mail-Referenzen (folder, uid, uidvalidity), höchstens 100."
+        },
+        "target_folder": {
+          "name": "Zielordner",
+          "description": "Pfad des Zielordners."
+        }
+      }
+    },
+    "copy": {
+      "name": "Nachrichten kopieren",
+      "description": "Kopiert Nachrichten in einen anderen Ordner und liefert die Referenzen der Kopien.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Der GMX-Mail-Konfigurationseintrag."
+        },
+        "refs": {
+          "name": "Nachrichten",
+          "description": "Liste von Mail-Referenzen (folder, uid, uidvalidity), höchstens 100."
+        },
+        "target_folder": {
+          "name": "Zielordner",
+          "description": "Pfad des Zielordners."
+        }
+      }
+    },
+    "mark_spam": {
+      "name": "Als Spam markieren",
+      "description": "Verschiebt Nachrichten in den Spam-Ordner.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Der GMX-Mail-Konfigurationseintrag."
+        },
+        "refs": {
+          "name": "Nachrichten",
+          "description": "Liste von Mail-Referenzen (folder, uid, uidvalidity), höchstens 100."
+        }
+      }
+    },
+    "mark_not_spam": {
+      "name": "Als kein Spam markieren",
+      "description": "Verschiebt Nachrichten zurück in den Posteingang.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Der GMX-Mail-Konfigurationseintrag."
+        },
+        "refs": {
+          "name": "Nachrichten",
+          "description": "Liste von Mail-Referenzen (folder, uid, uidvalidity), höchstens 100."
+        }
+      }
+    },
+    "create_folder": {
+      "name": "Ordner anlegen",
+      "description": "Legt einen Ordner an, optional unterhalb eines Ordners (nicht unterhalb von Spezialordnern).",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Der GMX-Mail-Konfigurationseintrag."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Ordnername ohne /, % und *."
+        },
+        "parent": {
+          "name": "Übergeordneter Ordner",
+          "description": "Pfad des übergeordneten Ordners; leer für die oberste Ebene."
+        }
+      }
+    },
+    "rename_folder": {
+      "name": "Ordner umbenennen",
+      "description": "Benennt einen Ordner innerhalb seines übergeordneten Ordners um. Posteingang und Spezialordner sind nicht umbenennbar.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Der GMX-Mail-Konfigurationseintrag."
+        },
+        "path": {
+          "name": "Ordner",
+          "description": "Pfad des Ordners, der umbenannt wird."
+        },
+        "new_name": {
+          "name": "Neuer Name",
+          "description": "Neuer Ordnername ohne /, % und *."
+        }
+      }
+    },
+    "save_draft": {
+      "name": "Entwurf speichern",
+      "description": "Speichert einen Entwurf im Ordner Entwürfe; es wird nichts gesendet.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Der GMX-Mail-Konfigurationseintrag."
+        },
+        "to": {
+          "name": "An",
+          "description": "Empfängeradressen."
+        },
+        "cc": {
+          "name": "CC",
+          "description": "CC-Adressen."
+        },
+        "bcc": {
+          "name": "BCC",
+          "description": "BCC-Adressen."
+        },
+        "subject": {
+          "name": "Betreff",
+          "description": "Betreff; bei Antworten standardmäßig „Re: …“ des Originals."
+        },
+        "body_text": {
+          "name": "Text",
+          "description": "Inhalt als Text."
+        },
+        "body_html": {
+          "name": "HTML",
+          "description": "Optionaler Inhalt als HTML."
+        },
+        "in_reply_to_ref": {
+          "name": "Antwort auf",
+          "description": "Referenz der Nachricht, auf die der Entwurf antwortet."
         }
       }
     }

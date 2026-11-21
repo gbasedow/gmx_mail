@@ -11,9 +11,11 @@ Unlike the GreenMail tests, these use the real connection code: implicit TLS wit
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import socket
 import ssl
+import subprocess
 import time
 import uuid
 from collections.abc import Callable, Iterator
@@ -27,7 +29,15 @@ from imapclient import IMAPClient
 from custom_components.gmx_mail.client.errors import GmxAuthError, GmxTlsError
 from custom_components.gmx_mail.client.folders import map_special_folders
 from custom_components.gmx_mail.client.idle import IdleWatcher
-from custom_components.gmx_mail.client.imap import ConnectionLimiter, ImapSettings, ImapWorker, check_imap_account, tls_context_with_minimum
+from custom_components.gmx_mail.client.imap import (
+    ConnectionLimiter,
+    ImapSettings,
+    ImapWorker,
+    ServerInfo,
+    check_imap_account,
+    open_imap_connection,
+    tls_context_with_minimum,
+)
 from custom_components.gmx_mail.client.reader import MailRef, SearchQuery, get_message, list_folders, poll, search
 from custom_components.gmx_mail.client.smtp import SmtpSettings, check_smtp_login
 from custom_components.gmx_mail.const import FolderRole, PushState, Security
@@ -216,3 +226,175 @@ async def _wait_for(condition: Callable[[], bool], seconds: float = 10.0) -> Non
         if asyncio.get_running_loop().time() > deadline:
             raise AssertionError("condition not reached in time")
         await asyncio.sleep(0.05)
+
+
+# --------------------------------------------------------------------------- M4: organising against the real server
+
+
+def test_move_copy_flags_and_fallback(mailer: IMAPClient, folder: str) -> None:
+    """MOVE/COPY return new references from the real server; the no-MOVE fallback leaves foreign \\Deleted mails alone."""
+    from custom_components.gmx_mail.client.writer import copy_or_move, create_folder, set_flags  # noqa: PLC0415
+
+    info = check_imap_account(SETTINGS, _context())
+    folder_map = map_special_folders(info.folders)
+    session = open_imap_connection(SETTINGS, _context())
+    try:
+        target = create_folder(session, info, folder_map, "Ziel ä", folder)
+        for subject in ("eins", "zwei", "drei", "fremd gelöscht"):
+            _deliver(mailer, folder, subject)
+        mailer.select_folder(folder, readonly=True)
+        validity = mailer.folder_status(folder, ["UIDVALIDITY"])[b"UIDVALIDITY"]
+        uids = sorted(mailer.search(["ALL"]))
+        mailer.unselect_folder()
+        refs = [MailRef(folder, uid, validity) for uid in uids]
+        # Another client marked the 4th message \Deleted but did not expunge it.
+        mailer.select_folder(folder)
+        mailer.add_flags([uids[3]], [b"\\Deleted"])
+        mailer.unselect_folder()
+
+        assert set_flags(session, info, refs[:1], ["flagged", "$Steuer"], []).count == 1
+        copied = copy_or_move(session, info, refs[:1], target, move=False)
+        moved = copy_or_move(session, info, refs[1:2], target, move=True)
+        no_move = ServerInfo(capabilities=info.capabilities - {"MOVE"}, folders=info.folders)
+        fallback = copy_or_move(session, no_move, refs[2:3], target, move=True)
+        for result in (copied, moved, fallback):
+            assert result.count == 1 and result.warnings == [] and result.new_refs[0] is not None
+
+        mailer.select_folder(folder, readonly=True)
+        remaining = sorted(mailer.search(["ALL"]))
+        flags = mailer.get_flags(remaining)
+        mailer.unselect_folder()
+        assert remaining == [uids[0], uids[3]]  # moved ones gone, the foreign \Deleted message still there
+        assert b"\\Deleted" in flags[uids[3]]
+        mailer.select_folder(target, readonly=True)
+        subjects = {
+            m[b"BODY[HEADER.FIELDS (SUBJECT)]"].decode().strip()
+            for m in mailer.fetch(mailer.search(["ALL"]), ["BODY.PEEK[HEADER.FIELDS (SUBJECT)]"]).values()
+        }
+        mailer.unselect_folder()
+        assert subjects == {"Subject: eins", "Subject: zwei", "Subject: drei"}
+    finally:
+        session.logout()
+        with contextlib.suppress(Exception):
+            mailer.delete_folder(f"{folder}/Ziel ä")
+
+
+def test_draft_lands_in_entwuerfe(mailer: IMAPClient) -> None:
+    """save_draft appends to Entwürfe with \\Draft and \\Seen and returns the reference (APPENDUID)."""
+    from custom_components.gmx_mail.client.writer import DraftInput, save_draft  # noqa: PLC0415
+
+    info = check_imap_account(SETTINGS, _context())
+    session = open_imap_connection(SETTINGS, _context())
+    try:
+        subject = f"Entwurf {uuid.uuid4().hex[:6]}"
+        ref, _size = save_draft(
+            session, info, map_special_folders(info.folders), DraftInput(sender=USER, to=["a@example.org"], subject=subject, body_text="x")
+        )
+    finally:
+        session.logout()
+    assert ref is not None and ref["folder"] == "Entwürfe"
+    mailer.select_folder("Entwürfe")
+    try:
+        flags = mailer.get_flags([ref["uid"]])[ref["uid"]]
+        assert b"\\Draft" in flags and b"\\Seen" in flags
+        mailer.add_flags([ref["uid"]], [b"\\Deleted"])
+        mailer.uid_expunge([ref["uid"]])  # clean up exactly this draft
+    finally:
+        mailer.unselect_folder()
+
+
+def _kick() -> bool:
+    """Disconnect all sessions of the test user server-side (like GMX's '* BYE timeout')."""
+    root = Path(__file__).resolve().parent.parent.parent
+    try:
+        result = subprocess.run(
+            ["docker", "compose", "exec", "-T", "dovecot", "doveadm", "kick", USER], cwd=root, capture_output=True, timeout=30, check=False
+        )
+    except OSError, subprocess.TimeoutExpired:
+        return False
+    return result.returncode == 0
+
+
+def _fresh() -> IMAPClient:
+    client = IMAPClient(HOST, port=IMAPS_PORT, ssl=True, ssl_context=_context(), timeout=15)
+    client.login(USER, PASSWORD)
+    return client
+
+
+async def test_idle_reconnects_after_server_disconnect() -> None:
+    """A server-side disconnect (* BYE, like GMX after ~30 min) leads to a quick reconnect; push works again.
+
+    ``doveadm kick`` disconnects *all* sessions of the user, so this test uses its own short-lived connections.
+    """
+    folder = f"IT-Kick-{uuid.uuid4().hex[:8]}"
+    setup = await asyncio.to_thread(_fresh)
+    setup.create_folder(folder)
+    setup.logout()
+    changes: list[float] = []
+    loop = asyncio.get_running_loop()
+
+    async def _ssl() -> ssl.SSLContext:
+        return await loop.run_in_executor(None, _context)
+
+    watcher = IdleWatcher(
+        SETTINGS,
+        ssl_context=_ssl,
+        limiter=ConnectionLimiter(),
+        on_change=lambda: changes.append(time.monotonic()),
+        on_auth_failed=lambda: None,
+        renew_seconds=60,
+        folder=folder,
+    )
+    task = asyncio.create_task(watcher.async_run())
+    try:
+        await _wait_for(lambda: watcher.state is PushState.CONNECTED)
+        started = time.monotonic()
+        if not await asyncio.to_thread(_kick):
+            pytest.skip("docker compose exec not available (needs the compose project)")
+        await _wait_for(lambda: watcher.reconnects >= 1 and watcher.state is PushState.CONNECTED, 20)
+        assert time.monotonic() - started < 9  # 5 s backoff + reconnect, no waiting for answers of a dead connection
+        before = len(changes)
+
+        def _deliver_fresh() -> None:
+            client = _fresh()
+            _deliver(client, folder, "nach dem Reconnect")
+            client.logout()
+
+        await asyncio.to_thread(_deliver_fresh)
+        await _wait_for(lambda: len(changes) > before)
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        cleaner = await asyncio.to_thread(_fresh)
+        cleaner.delete_folder(folder)
+        cleaner.logout()
+
+
+def test_live_check_tool_runs_against_gmx_like_server() -> None:
+    """tools/gmx_live_check.py (manual GMX check) works end to end and cleans up after itself."""
+    import json  # noqa: PLC0415
+    import sys  # noqa: PLC0415
+
+    root = Path(__file__).parent.parent.parent
+    env = {**os.environ, "GMX_USER": USER, "GMX_PASS": PASSWORD}
+    args = ["--host", HOST, "--port", str(IMAPS_PORT), "--cafile", str(CA_FILE), "--idle-minutes", "0.1"]
+    done = subprocess.run(
+        [sys.executable, str(root / "tools" / "gmx_live_check.py"), *args], env=env, capture_output=True, timeout=90, check=False
+    )
+    assert done.returncode == 0, done.stderr.decode()[-2000:]
+    report = json.loads(done.stdout)
+    assert report["partial_fetch"] == "parsed"
+    assert report["recent_after_select"]["cleared_by_select"]  # Dovecot: SELECT takes \Recent away from others
+    assert report["copy"]["new_refs_known"] and report["move"]["via_copyuid"]
+    assert report["draft"] == {"ref_known": True, "size": report["draft"]["size"], "folder_role_ok": True}
+    assert report["idle"]["connected"] and report["idle"]["push_delay_s"] is not None
+    assert report["cleanup"] == {"ok": True, "errors": []}
+    assert USER not in done.stdout.decode() and PASSWORD not in done.stdout.decode()  # metadata only
+    client = _fresh()
+    try:
+        assert not [f for f in client.list_folders() if f[2].startswith("HA-Live")]
+        client.select_folder("INBOX", readonly=True)
+        assert client.search(["HEADER", "Message-ID", "gmx-mail-live-check"]) == []
+    finally:
+        client.logout()

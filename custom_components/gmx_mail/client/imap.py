@@ -94,6 +94,30 @@ class ImapSession(Protocol):
     def fetch(self, messages: Sequence[int], data: Sequence[str], modifiers: Any = None) -> dict[int, dict[bytes, Any]]:
         """UID FETCH."""
 
+    def add_flags(self, messages: Sequence[int], flags: Sequence[str], silent: bool = False) -> Any:
+        """UID STORE +FLAGS."""
+
+    def remove_flags(self, messages: Sequence[int], flags: Sequence[str], silent: bool = False) -> Any:
+        """UID STORE -FLAGS."""
+
+    def move(self, messages: Sequence[int], folder: str) -> Any:
+        """UID MOVE (RFC 6851)."""
+
+    def copy(self, messages: Sequence[int], folder: str) -> Any:
+        """UID COPY."""
+
+    def uid_expunge(self, messages: Sequence[int]) -> Any:
+        """UID EXPUNGE of exactly these UIDs (UIDPLUS)."""
+
+    def create_folder(self, folder: str) -> Any:
+        """CREATE."""
+
+    def rename_folder(self, old_name: str, new_name: str) -> Any:
+        """RENAME."""
+
+    def append(self, folder: str, msg: bytes, flags: Sequence[str] = (), msg_time: Any = None) -> Any:
+        """APPEND."""
+
 
 class Executor(Protocol):
     """Runs a blocking callable outside the event loop (``hass.async_add_executor_job``)."""

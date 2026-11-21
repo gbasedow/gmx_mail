@@ -6,8 +6,9 @@ import base64
 import re
 import smtplib
 import ssl
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
 
 from imapclient.exceptions import IMAPClientAbortError, IMAPClientError, LoginError, ProtocolError
@@ -49,11 +50,18 @@ class FakeImapServer:
     logins: int = 0
     mailboxes: dict[str, FakeMailbox] = field(default_factory=lambda: {"INBOX": FakeMailbox()})
     status_error: BaseException | None = None
+    # How COPYUID/APPENDUID are reported: "untagged" (GMX for MOVE), "tagged" (GMX for COPY), "none".
+    move_copyuid: str = "untagged"
+    copy_copyuid: str = "tagged"
+    appenduid: bool = True
+    permanent_flags: tuple[bytes, ...] = (b"\\Answered", b"\\Flagged", b"\\Draft", b"\\Deleted", b"\\Seen", b"\\*")
+    write_error: BaseException | None = None  # raised by the next writing command (e.g. a dropped connection)
     # Optional hook: (folder, criteria, charset) -> UIDs; default: all non-deleted messages.
     search_hook: Any = None
     search_error: BaseException | None = None
     broken_partial_fetch: bool = False
     commands: list[tuple[Any, ...]] = field(default_factory=list)
+    appended: list[bytes] = field(default_factory=list)
 
     def mailbox(self, name: str, uidvalidity: int | None = None) -> FakeMailbox:
         """Return (and create) a mailbox; an explicit ``uidvalidity`` is applied."""
@@ -95,6 +103,8 @@ class FakeIMAPClient:
         self.noops = 0
         self.commands: list[str] = []
         self.selected: str | None = None
+        self.readonly = True
+        self._imap = SimpleNamespace(untagged_responses={})  # imaplib keeps response codes (e.g. COPYUID) here
 
     def starttls(self, ssl_context: Any = None) -> bytes:
         """Upgrade to TLS."""
@@ -159,7 +169,13 @@ class FakeIMAPClient:
         if box is None:
             raise IMAPClientError("select failed: NO [NONEXISTENT] Unknown folder")
         self.selected = folder
-        return {b"EXISTS": len(box.messages), b"UIDVALIDITY": box.uidvalidity, b"READ-WRITE": not readonly}
+        self.readonly = readonly
+        return {
+            b"EXISTS": len(box.messages),
+            b"UIDVALIDITY": box.uidvalidity,
+            b"READ-WRITE": not readonly,
+            b"PERMANENTFLAGS": self.server.permanent_flags,
+        }
 
     def unselect_folder(self) -> bytes:
         """UNSELECT."""
@@ -230,6 +246,140 @@ class FakeIMAPClient:
             result[uid] = entry
         return result
 
+    # ------------------------------------------------------------------ writing commands
+
+    def _writable(self) -> FakeMailbox:
+        self._check_open()
+        if self.server.write_error is not None:
+            error, self.server.write_error = self.server.write_error, None
+            raise error
+        assert not self.readonly, "write on a read-only (EXAMINE) folder"
+        return self._box()
+
+    def add_flags(self, messages: Any, flags: Any, silent: bool = False) -> Any:
+        """UID STORE +FLAGS."""
+        box = self._writable()
+        self.server.commands.append(("add_flags", list(messages), list(flags)))
+        for uid in messages:
+            if uid in box.messages:
+                current = list(box.messages[uid].flags)
+                current += [f.encode() for f in flags if f.encode() not in current]
+                box.messages[uid].flags = tuple(current)
+        return None if silent else {}
+
+    def remove_flags(self, messages: Any, flags: Any, silent: bool = False) -> Any:
+        """UID STORE -FLAGS."""
+        box = self._writable()
+        self.server.commands.append(("remove_flags", list(messages), list(flags)))
+        for uid in messages:
+            if uid in box.messages:
+                box.messages[uid].flags = tuple(f for f in box.messages[uid].flags if f.decode() not in flags)
+        return None if silent else {}
+
+    def _copy_into(self, messages: Any, folder: str) -> tuple[int, list[int], list[int]]:
+        target = self.server.mailboxes.get(folder)
+        if target is None:
+            raise IMAPClientError("COPY failed: NO [TRYCREATE]")
+        source = self._box()
+        src, dst = [], []
+        for uid in sorted(messages):
+            if uid in source.messages:
+                new_uid = target.allocate()
+                target.messages[new_uid] = replace(
+                    source.messages[uid], flags=tuple(f for f in source.messages[uid].flags if f != b"\\Deleted")
+                )
+                src.append(uid)
+                dst.append(new_uid)
+        return target.uidvalidity, src, dst
+
+    @staticmethod
+    def _set(uids: list[int]) -> str:
+        return ",".join(str(u) for u in uids)
+
+    def copy(self, messages: Any, folder: str) -> bytes:
+        """UID COPY (COPYUID in the tagged response, as GMX does)."""
+        self._writable()
+        self.server.commands.append(("copy", list(messages), folder))
+        validity, src, dst = self._copy_into(messages, folder)
+        if self.server.copy_copyuid == "tagged":
+            return f"[COPYUID {validity} {self._set(src)} {self._set(dst)}] Copy completed".encode()
+        return b"Copy completed"
+
+    def move(self, messages: Any, folder: str) -> bytes:
+        """UID MOVE (GMX: COPYUID untagged)."""
+        box = self._writable()
+        if b"MOVE" not in self.server.capabilities:
+            raise IMAPClientError("MOVE not supported")
+        self.server.commands.append(("move", list(messages), folder))
+        validity, src, dst = self._copy_into(messages, folder)
+        for uid in src:
+            box.highest_uid = max(box.highest_uid, uid)  # UIDs are never reused
+            del box.messages[uid]
+        code = f"{validity} {self._set(src)} {self._set(dst)}".encode()
+        if self.server.move_copyuid == "untagged":
+            self._imap.untagged_responses.setdefault("COPYUID", []).append(code)
+        elif self.server.move_copyuid == "tagged":
+            return b"[COPYUID " + code + b"] Move completed"
+        return b"Move completed"
+
+    def uid_expunge(self, messages: Any) -> bytes:
+        """UID EXPUNGE: removes only the given UIDs that are marked \\Deleted."""
+        box = self._writable()
+        if b"UIDPLUS" not in self.server.capabilities:
+            raise IMAPClientError("UIDPLUS not supported")
+        self.server.commands.append(("uid_expunge", list(messages)))
+        for uid in messages:
+            if uid in box.messages and b"\\Deleted" in box.messages[uid].flags:
+                box.highest_uid = max(box.highest_uid, uid)
+                del box.messages[uid]
+        return b"OK"
+
+    def expunge(self, messages: Any = None) -> None:
+        """Mailbox-wide EXPUNGE is forbidden in this project."""
+        raise AssertionError("mailbox-wide EXPUNGE must never be used")
+
+    def close_folder(self) -> None:
+        """CLOSE expunges implicitly - forbidden in this project."""
+        raise AssertionError("CLOSE must never be used")
+
+    def create_folder(self, folder: str) -> bytes:
+        """CREATE."""
+        self._check_open()
+        if self.server.write_error is not None:
+            error, self.server.write_error = self.server.write_error, None
+            raise error
+        self.server.commands.append(("create", folder))
+        self.server.folders.append(((b"\\HasNoChildren",), b"/", folder))
+        self.server.mailbox(folder)
+        return b"OK"
+
+    def rename_folder(self, old_name: str, new_name: str) -> bytes:
+        """RENAME."""
+        self._check_open()
+        self.server.commands.append(("rename", old_name, new_name))
+        self.server.folders = [(flags, delim, new_name if name == old_name else name) for flags, delim, name in self.server.folders]
+        if old_name in self.server.mailboxes:
+            self.server.mailboxes[new_name] = self.server.mailboxes.pop(old_name)
+        return b"OK"
+
+    def append(self, folder: str, msg: bytes, flags: Any = (), msg_time: Any = None) -> bytes:
+        """APPEND (APPENDUID like GMX unless disabled)."""
+        self._check_open()
+        box = self.server.mailboxes.get(folder)
+        if box is None:
+            raise IMAPClientError("APPEND failed: NO [TRYCREATE]")
+        self.server.commands.append(("append", folder, tuple(flags), len(msg)))
+        header, _, body = msg.partition(b"\r\n\r\n")
+        uid = box.allocate()
+        structure = (b"text", b"plain", (b"charset", b"utf-8"), None, None, b"7bit", len(body), 1, None, None, None)
+        box.messages[uid] = FakeMessage(
+            header=header + b"\r\n\r\n", parts={"1": body}, bodystructure=structure, flags=tuple(f.encode() for f in flags), size=len(msg)
+        )
+        self.server.appended.append(msg)
+        if self.server.appenduid:
+            return f"[APPENDUID {box.uidvalidity} {uid}] Append completed".encode()
+        return b"Append completed"
+
 
 _PEEK_RE = re.compile(r"^BODY\.PEEK\[([^\]]*)\](?:<0\.(\d+)>)?$")
 
@@ -277,6 +427,12 @@ class FakeMailbox:
 
     uidvalidity: int = 1234
     messages: dict[int, FakeMessage] = field(default_factory=dict)
+    highest_uid: int = 0
+
+    def allocate(self) -> int:
+        """Return the next UID (never reused, like a real server)."""
+        self.highest_uid = max(self.highest_uid, max(self.messages, default=0)) + 1
+        return self.highest_uid
 
 
 def plain_message(
@@ -288,13 +444,14 @@ def plain_message(
     date: datetime | None = None,
     extra_headers: str = "",
     flags: tuple[bytes, ...] = (),
+    message_id: str = "<m1@example.org>",
 ) -> FakeMessage:
     """A single-part text/plain message (base64-encoded body, part '1')."""
     from email.header import Header  # noqa: PLC0415
 
     header = (
         f"From: {sender}\r\nTo: {to}\r\nSubject: {Header(subject, 'utf-8').encode()}\r\n"
-        f"Date: Fri, 20 Nov 2026 10:00:00 +0100\r\nMessage-ID: <m1@example.org>\r\n{extra_headers}\r\n"
+        f"Date: Fri, 20 Nov 2026 10:00:00 +0100\r\nMessage-ID: {message_id}\r\n{extra_headers}\r\n"
     ).encode()
     raw = base64.encodebytes(body.encode("utf-8"))
     structure = (b"text", b"plain", (b"charset", b"utf-8"), None, None, b"base64", len(raw), 1, None, None, None)

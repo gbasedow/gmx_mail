@@ -28,6 +28,9 @@ import aiohttp
 import pytest
 from imapclient import IMAPClient
 
+from custom_components.gmx_mail.const import DEFAULT_OPTIONS
+from custom_components.gmx_mail.options import nest
+
 pytestmark = pytest.mark.staging
 
 HA_URL = os.environ.get("STAGING_URL", "http://127.0.0.1:8123")
@@ -222,3 +225,34 @@ async def test_end_to_end(staging: Staging) -> None:
     # 7. Actions counter
     counter = await staging.rest("GET", f"/api/states/{by_key['actions_today']}")
     assert int(counter["state"]) == 4  # get_status, list_folders, search, get_message
+
+    # 8. M4: enable the "organize" level through the options flow (as a person would in the UI)
+    options = nest({**DEFAULT_OPTIONS, "permissions": ["read", "organize"]})
+    flow = await staging.rest("POST", "/api/config/config_entries/options/flow", {"handler": entry_id})
+    result = await staging.rest("POST", f"/api/config/config_entries/options/flow/{flow['flow_id']}", options)
+    assert result["type"] == "create_entry", result
+    status: dict[str, Any] = {}
+    for _ in range(30):  # the entry reloads after the options change ("not loaded" for a moment)
+        try:
+            status = await staging.call("get_status", entry_id)
+        except AssertionError:
+            status = {}
+        if "organize" in status.get("data", {}).get("permissions", []):
+            break
+        await asyncio.sleep(1)
+    assert "organize" in status["data"]["permissions"]
+
+    # 9. Organise: flag, create folder, move (new reference), draft; audit log without content
+    flagged = await staging.call("set_flags", entry_id, refs=[event["ref"]], add=["flagged", "$Staging"])
+    assert flagged["data"]["updated"] == 1
+    created = await staging.call("create_folder", entry_id, name="Staging-Ablage")
+    moved = await staging.call("move", entry_id, refs=[event["ref"]], target_folder=created["data"]["path"])
+    new_ref = moved["data"]["new_refs"][0]
+    assert new_ref["folder"] == "Staging-Ablage"
+    reread = await staging.call("get_message", entry_id, ref=new_ref)
+    assert "\\Flagged" in reread["data"]["flags"] and "$Staging" in reread["data"]["flags"]
+    draft = await staging.call("save_draft", entry_id, to=["anna@example.org"], body_text="Entwurf", in_reply_to_ref=new_ref)
+    assert draft["data"]["ref"]["folder"] == "Entwürfe"
+    audit = await staging.call("get_audit_log", entry_id)
+    assert [e["action"] for e in audit["data"]["entries"]] == ["save_draft", "move", "create_folder", "set_flags"]
+    assert "anna@example.org" not in json.dumps(audit)

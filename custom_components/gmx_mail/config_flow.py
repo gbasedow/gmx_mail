@@ -32,6 +32,7 @@ from .const import (
     CONF_ALLOW_PERMANENT_DELETE,
     CONF_ALLOW_REPLY_TO_SENDER,
     CONF_ALLOWLIST,
+    CONF_ATTACHMENT_RETENTION_DAYS,
     CONF_AUDIT_RETENTION_DAYS,
     CONF_EMAIL,
     CONF_EVENT_INCLUDE_HEADERS,
@@ -307,6 +308,7 @@ def build_options_schema(folders: list[str]) -> probatio.Schema:
             {
                 probatio.Required(CONF_EVENT_INCLUDE_HEADERS): BooleanSelector(),
                 probatio.Required(CONF_AUDIT_RETENTION_DAYS): _int_selector(CONF_AUDIT_RETENTION_DAYS, "d"),
+                probatio.Required(CONF_ATTACHMENT_RETENTION_DAYS): _int_selector(CONF_ATTACHMENT_RETENTION_DAYS, "d"),
             },
             True,
         ),

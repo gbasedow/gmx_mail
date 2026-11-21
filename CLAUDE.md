@@ -19,8 +19,8 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
 
 ## 2. Status
 
-- Stand: 21.11.2026. **M1–M3 in `main` (PR #4). Offene Tests nachgeholt (Dovecot GMX-nah, Staging mit echtem HA 2026.11.2).
-  Nächster Schritt: M4** (Organisieren, Audit-Log) inkl. der übernommenen offenen Punkte (SPEC §7) – erst nach Freigabe beginnen.
+- Stand: 21.11.2026. **M1–M3 in `main`. M4 (Organisieren, Audit-Log) freigegeben (21.11.2026) und per PR nach `main` übernommen.**
+  Offen aus M4: Lauf von `tools/gmx_live_check.py` gegen das GMX-Testkonto durch den Nutzer. Danach M5 (Löschen) – erst nach Freigabe.
   M0 (Live-Probe) ist abgeschlossen; Ergebnisse in `GMX-NOTES.md` (Spalte „Ergebnis“, Abschnitt 4) und `docs/probe-2026-11-20-v4.json`.
   Kern: keine Gesendet-Kopie per SMTP (→ `sent_copy_mode=append`), Suchindex ≈ 30 s verzögert, ruhende Verbindungen/IDLE nach ≈ 30 min
   getrennt (`* BYE timeout`), `COPYUID` bei MOVE ungetaggt (nur 1 Messpunkt), Probe v3d nutzt `UNSELECT` statt `CLOSE`.
@@ -32,7 +32,7 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
   Repair-Issue `imap_possibly_disabled`. (M1 enthielt noch keine Aktionen.)
 - Prüfungen: 107 Integrationstests + 29 Probe-Tests grün, Coverage 99 %, ruff, mypy (strict), hassfest (GitHub Action) grün.
   **HACS:** Das Repository ist seit 21.11.2026 öffentlich, die HACS-Action läuft wieder (Job wird nur bei privatem Repo übersprungen, DECISIONS Nr. 17).
-  Lizenz MIT ist eingecheckt; Beschreibung und Topics muss der Nutzer in den GitHub-Einstellungen setzen (DECISIONS Nr. 33). `pytest-homeassistant-custom-component` 0.13.375 bringt HA **2026.10.4** mit – für 2026.11 gibt es noch keine Version.
+  Lizenz MIT, Beschreibung und Topics sind gesetzt; HACS-Action auf `main` grün seit 21.11.2026 (DECISIONS Nr. 33). `pytest-homeassistant-custom-component` 0.13.375 bringt HA **2026.10.4** mit – für 2026.11 gibt es noch keine Version.
 - Entscheidungen aus M1: `docs/DECISIONS.md` Nr. 11–17, alle vom Nutzer freigegeben (Nr. 12: Limits frei wählbar, SPEC-Werte als Voreinstellung). Offen für M6: Stundenlimit für Empfänger (Drittquelle: 11 Empfänger/Stunde, unbestätigt).
 - **M2-Umfang:** Aktionen `list_folders`, `search`, `get_message`, `get_attachment`, `get_status` (`services.py`, nur Stufe R,
   `SupportsResponse.ONLY`); `client/reader.py` (EXAMINE/UNSELECT, `BODY.PEEK`, Indexverzögerungs-Fallback, SORT oder clientseitig),
@@ -49,6 +49,12 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
 - **Nachgeholte Tests (21.11.2026):** `tests/integration/test_dovecot_gmx.py` (GMX-naher Dovecot, TLS mit Test-CA, echter Produktionspfad
   inkl. IDLE über TLS) und `tests/staging/` (echtes HA 2026.11.2 im Container, Ende-zu-Ende über REST/WebSocket inkl. IDLE-Ereignis).
   Beide laufen in der CI. Gefunden: aioimaplib kodiert Ordnernamen nicht (DECISIONS Nr. 36). Entscheidungen Nr. 34–36.
+- **M4-Umfang:** Aktionen `set_flags`, `move`, `copy`, `mark_spam`, `mark_not_spam`, `create_folder`, `rename_folder`, `save_draft` (Stufe O,
+  `SupportsResponse.OPTIONAL`, max. 100 Refs, kein Tageslimit) und `get_audit_log` (R); `client/writer.py` (SELECT/UNSELECT, COPYUID aus dem
+  imaplib-Antwortspeicher mit Message-ID-Rückfall, MOVE-Rückfall COPY + `\Deleted` + UID EXPUNGE nur mit UIDPLUS, Ordner- und Flag-Regeln,
+  Entwurf per APPEND), `audit.py` (Store, Ereignis `gmx_mail_action_executed`, nur Fingerabdruck der Parameter), `attachments.py`
+  (Option `attachment_retention_days`), IDLE-Korrektur nach BYE, `tools/gmx_live_check.py`. Details: SPEC §3 „Umsetzung M4“, Entscheidungen Nr. 37–45 (alle freigegeben).
+  Prüfungen: 284 HA-Tests + 16 Servertests (GreenMail, Dovecot inkl. Reconnect per `doveadm kick` und Live-Check-Skript) + Staging (Schritte 8–9) + 29 Probe-Tests grün, ruff, mypy grün.
 - Repo-Sichtung aus Abschnitt 10 erledigt: `docs/REVIEW-REPOS-2026-11-20.md`.
 - **Noch offen:** IMAP-Abschaltfrist (Langzeitbeobachtung).
 - Alle Annahmen, die in `GMX-NOTES.md` als `U` (unbestätigt) oder `LIVE` markiert sind, nicht als Fakt behandeln.
@@ -141,11 +147,12 @@ mypy custom_components/gmx_mail
 # hassfest + HACS-Validierung laufen als GitHub Actions (.github/workflows/validate.yml)
 # HACS-Action prüft nur öffentliche Repos (bei privatem Repo wird der Job übersprungen)
 GMX_USER=... GMX_PASS=... python3 tools/gmx_probe.py   # nur manuell, Test-Konto
+GMX_USER=... GMX_PASS=... python3 tools/gmx_live_check.py --idle-minutes 2   # nur manuell: Produktionscode gegen GMX (35 min für BYE)
 ```
 
 ## 9. Meilensteine (Kurzfassung, Details in `SPEC.md`)
 
-M0 Live-Probe (v2 erledigt, Folgelauf v3 offen) · M1 Gerüst + Flows · M2 Lesen · M3 Coordinator/IDLE/Sensoren/Diagnose/Repairs · M4 Organisieren ·
+M0 Live-Probe (erledigt) · M1 Gerüst + Flows · M2 Lesen · M3 Coordinator/IDLE/Sensoren/Diagnose/Repairs · M4 Organisieren ·
 M5 Löschen · M6 Senden · M7 Härtung, Doku, Release.
 
 ## 10. Gesichtete Fremdprojekte

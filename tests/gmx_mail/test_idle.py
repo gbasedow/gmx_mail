@@ -137,7 +137,9 @@ async def test_bye_timeout_reconnects_with_backoff(server: FakeIdleServer) -> No
     await harness.until(lambda: len(server.clients) == 2 and harness.watcher.connected)
     assert harness.sleeps == [5.0]
     assert harness.watcher.reconnects == 1
-    assert server.clients[0].logged_out
+    # After BYE the server closes the socket: no DONE and no LOGOUT (both would only wait for timeouts).
+    assert server.clients[0].done_calls == 0
+    assert not server.clients[0].logged_out
     assert harness.limiter.in_use == 1  # slot released and taken again
     assert harness.changes == 2  # catch-up after the reconnect
     await harness.stop()
@@ -151,6 +153,7 @@ async def test_lost_connection_wakes_the_wait(server: FakeIdleServer) -> None:
     harness.client().lose_connection()
     await harness.until(lambda: len(server.clients) == 2 and harness.watcher.connected)
     assert harness.watcher.last_error is None
+    assert server.clients[0].done_calls == 0 and not server.clients[0].logged_out
     await harness.stop()
 
 

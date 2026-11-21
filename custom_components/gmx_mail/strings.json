@@ -129,10 +129,12 @@
             "name": "Privacy and audit",
             "data": {
               "event_include_headers": "Include sender and subject in events",
-              "audit_retention_days": "Keep audit log for"
+              "audit_retention_days": "Keep audit log for",
+              "attachment_retention_days": "Delete saved attachments after"
             },
             "data_description": {
-              "event_include_headers": "Event data ends up in the logbook and recorder and can reach an AI assistant."
+              "event_include_headers": "Event data ends up in the logbook and recorder and can reach an AI assistant.",
+              "attachment_retention_days": "Attachments saved by get_attachment are deleted after this many days (only in the integration's own folder). 0 = keep."
             }
           }
         }
@@ -244,6 +246,42 @@
     },
     "html_output_disabled": {
       "message": "HTML output is not enabled in the options of this account."
+    },
+    "outcome_unknown": {
+      "message": "The connection was lost during a writing action. It is unknown whether the server executed it; check the mailbox before trying again."
+    },
+    "folder_exists": {
+      "message": "A folder with this name already exists."
+    },
+    "protected_folder": {
+      "message": "The inbox and special folders cannot be renamed and get no subfolders."
+    },
+    "message_too_large": {
+      "message": "The message is larger than the server allows (about 28 MB at GMX)."
+    },
+    "move_unsupported": {
+      "message": "The server supports neither MOVE nor UIDPLUS; moving is not possible without deleting other messages."
+    },
+    "keywords_not_supported": {
+      "message": "The folder does not allow own keywords."
+    },
+    "invalid_folder_name": {
+      "message": "Invalid folder name (empty, too long, or contains /, % or *)."
+    },
+    "same_folder": {
+      "message": "Source and target folder are the same."
+    },
+    "no_flags": {
+      "message": "Give at least one flag to add or remove."
+    },
+    "invalid_flag": {
+      "message": "Only seen, flagged, answered and own keywords (letters, digits, _ . - and an optional leading $) are allowed."
+    },
+    "no_junk_folder": {
+      "message": "No spam folder was found for this account."
+    },
+    "invalid_address": {
+      "message": "An address is invalid."
     }
   },
   "issues": {
@@ -436,6 +474,180 @@
         "config_entry_id": {
           "name": "Account",
           "description": "The GMX Mail config entry."
+        }
+      }
+    },
+    "get_audit_log": {
+      "name": "Get audit log",
+      "description": "Returns the latest executed writing actions (time, action, count, folders, outcome) without mail content.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The GMX Mail config entry."
+        },
+        "limit": {
+          "name": "Limit",
+          "description": "Number of entries (1-200)."
+        }
+      }
+    },
+    "set_flags": {
+      "name": "Set flags",
+      "description": "Sets or removes flags on messages: seen, flagged, answered and own keywords such as $Tax. Deletion marks are not possible here.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The GMX Mail config entry."
+        },
+        "refs": {
+          "name": "Messages",
+          "description": "List of message references (folder, uid, uidvalidity), at most 100."
+        },
+        "add": {
+          "name": "Add",
+          "description": "Flags to set, e.g. seen, flagged, $Tax."
+        },
+        "remove": {
+          "name": "Remove",
+          "description": "Flags to remove."
+        }
+      }
+    },
+    "move": {
+      "name": "Move messages",
+      "description": "Moves messages to another folder and returns their new references.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The GMX Mail config entry."
+        },
+        "refs": {
+          "name": "Messages",
+          "description": "List of message references (folder, uid, uidvalidity), at most 100."
+        },
+        "target_folder": {
+          "name": "Target folder",
+          "description": "Path of the target folder."
+        }
+      }
+    },
+    "copy": {
+      "name": "Copy messages",
+      "description": "Copies messages to another folder and returns the references of the copies.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The GMX Mail config entry."
+        },
+        "refs": {
+          "name": "Messages",
+          "description": "List of message references (folder, uid, uidvalidity), at most 100."
+        },
+        "target_folder": {
+          "name": "Target folder",
+          "description": "Path of the target folder."
+        }
+      }
+    },
+    "mark_spam": {
+      "name": "Mark as spam",
+      "description": "Moves messages to the spam folder.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The GMX Mail config entry."
+        },
+        "refs": {
+          "name": "Messages",
+          "description": "List of message references (folder, uid, uidvalidity), at most 100."
+        }
+      }
+    },
+    "mark_not_spam": {
+      "name": "Mark as not spam",
+      "description": "Moves messages back to the inbox.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The GMX Mail config entry."
+        },
+        "refs": {
+          "name": "Messages",
+          "description": "List of message references (folder, uid, uidvalidity), at most 100."
+        }
+      }
+    },
+    "create_folder": {
+      "name": "Create folder",
+      "description": "Creates a folder, optionally below a parent folder (not below special folders).",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The GMX Mail config entry."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Folder name without /, % and *."
+        },
+        "parent": {
+          "name": "Parent folder",
+          "description": "Path of the parent folder; empty for the top level."
+        }
+      }
+    },
+    "rename_folder": {
+      "name": "Rename folder",
+      "description": "Renames a folder within its parent. Inbox and special folders cannot be renamed.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The GMX Mail config entry."
+        },
+        "path": {
+          "name": "Folder",
+          "description": "Path of the folder to rename."
+        },
+        "new_name": {
+          "name": "New name",
+          "description": "New folder name without /, % and *."
+        }
+      }
+    },
+    "save_draft": {
+      "name": "Save draft",
+      "description": "Saves a draft in the drafts folder; nothing is sent.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The GMX Mail config entry."
+        },
+        "to": {
+          "name": "To",
+          "description": "Recipient addresses."
+        },
+        "cc": {
+          "name": "CC",
+          "description": "CC addresses."
+        },
+        "bcc": {
+          "name": "BCC",
+          "description": "BCC addresses."
+        },
+        "subject": {
+          "name": "Subject",
+          "description": "Subject; for replies 'Re: …' of the original by default."
+        },
+        "body_text": {
+          "name": "Text",
+          "description": "Plain-text body."
+        },
+        "body_html": {
+          "name": "HTML",
+          "description": "Optional HTML body."
+        },
+        "in_reply_to_ref": {
+          "name": "Reply to",
+          "description": "Reference of the message this draft answers."
         }
       }
     }

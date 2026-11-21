@@ -20,10 +20,11 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
 ## 2. Status
 
 - Stand: 21.11.2026. **M1–M3 in `main`. M4 (Organisieren, Audit-Log) freigegeben (21.11.2026) und per PR nach `main` übernommen.**
-  Offen aus M4: Lauf von `tools/gmx_live_check.py` gegen das GMX-Testkonto durch den Nutzer. Danach M5 (Löschen) – erst nach Freigabe.
+  Live-Check gegen das GMX-Testkonto (21.11.2026) bestanden: Teil-FETCH ok, COPYUID bei MOVE, SELECT löscht `\Recent`, Push ≈ 10 s.
+  Offen aus M4: 35-Minuten-Lauf (BYE/Reconnect). Danach M5 (Löschen) – erst nach Freigabe.
   M0 (Live-Probe) ist abgeschlossen; Ergebnisse in `GMX-NOTES.md` (Spalte „Ergebnis“, Abschnitt 4) und `docs/probe-2026-11-20-v4.json`.
   Kern: keine Gesendet-Kopie per SMTP (→ `sent_copy_mode=append`), Suchindex ≈ 30 s verzögert, ruhende Verbindungen/IDLE nach ≈ 30 min
-  getrennt (`* BYE timeout`), `COPYUID` bei MOVE ungetaggt (nur 1 Messpunkt), Probe v3d nutzt `UNSELECT` statt `CLOSE`.
+  getrennt (`* BYE timeout`), `COPYUID` bei MOVE ungetaggt (2 Messpunkte), Probe v3d nutzt `UNSELECT` statt `CLOSE`.
 - **M1-Umfang:** Gerüst (`manifest.json`, `const.py`, `strings.json`, `translations/{de,en}.json`), Config-Flow (IMAP-Login, CAPABILITY, LIST,
   SMTP-Login), Reauth-, Reconfigure- und Options-Flow (alle Optionen aus SPEC §2, mit Validierung), `client/imap.py` (ImapWorker: imapclient im
   Executor, `asyncio.Lock`, Lazy-Connect, NOOP nach > 5 min, Schließen nach 10 min, ein Reconnect mit Wiederholung nur für Lesen,
@@ -147,7 +148,7 @@ mypy custom_components/gmx_mail
 # hassfest + HACS-Validierung laufen als GitHub Actions (.github/workflows/validate.yml)
 # HACS-Action prüft nur öffentliche Repos (bei privatem Repo wird der Job übersprungen)
 GMX_USER=... GMX_PASS=... python3 tools/gmx_probe.py   # nur manuell, Test-Konto
-GMX_USER=... GMX_PASS=... python3 tools/gmx_live_check.py --idle-minutes 2   # nur manuell, Python 3.14: Produktionscode gegen GMX (35 min für BYE)
+GMX_USER=... GMX_PASS=... python3 tools/gmx_live_check.py --idle-minutes 2 --output live_check.json   # nur manuell, Python 3.14: Produktionscode gegen GMX (35 min für BYE)
 ```
 
 ## 9. Meilensteine (Kurzfassung, Details in `SPEC.md`)

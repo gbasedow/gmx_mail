@@ -16,8 +16,8 @@ Safety rules (same as tools/gmx_probe.py):
 
 Usage:
     export GMX_USER='testkonto@gmx.de' GMX_PASS='<app password>'
-    python3 tools/gmx_live_check.py --idle-minutes 2 > live_check.json
-    python3 tools/gmx_live_check.py --idle-minutes 35 > live_check_idle.json      # observe BYE + reconnect
+    python3 tools/gmx_live_check.py --idle-minutes 2 --output live_check.json
+    python3 tools/gmx_live_check.py --idle-minutes 35 --output live_check_idle.json      # observe BYE + reconnect
 
 Needs: Python 3.14 (same as Home Assistant 2026.11; the integration code uses 3.14 syntax) and
 ``pip install imapclient aioimaplib certifi`` (no Home Assistant installation required).
@@ -253,6 +253,7 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=993)
     parser.add_argument("--cafile", help="CA file (only for local test servers)")
     parser.add_argument("--folder-prefix", default="HA-Live")
+    parser.add_argument("--output", help="write the JSON report to this file (UTF-8) instead of standard output")
     args = parser.parse_args()
     user, password = os.environ.get("GMX_USER"), os.environ.get("GMX_PASS")
     if not user or not password:
@@ -270,7 +271,11 @@ def main() -> int:
             raise  # unexpected: keep the traceback (it contains no credentials)
         print(f"{type(err).__name__}: {hints[type(err).__name__]}", file=sys.stderr)
         return 1
-    print(json.dumps(report, indent=2, default=str))
+    text = json.dumps(report, indent=2, default=str)
+    if args.output:
+        Path(args.output).write_text(text + "\n", encoding="utf-8")  # Windows PowerShell's ">" would write UTF-16
+    else:
+        print(text)
     return 0
 
 

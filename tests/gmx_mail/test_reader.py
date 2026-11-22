@@ -31,6 +31,7 @@ from custom_components.gmx_mail.client.reader import (
     get_message,
     list_folders,
     search,
+    uid_in_range,
     unseen_count,
 )
 
@@ -433,3 +434,35 @@ def test_get_message_cleaned_html(server: FakeImapServer) -> None:
     assert plain.body_format == "text"
     assert plain.text == "Hallo Welt"
     assert plain.warnings == ["no_html_part"]
+
+
+@pytest.mark.parametrize(
+    ("uid", "uid_range", "expected"),
+    [
+        (12, "17:*", False),  # IMAP: "17:*" also matches the last message when all UIDs are lower
+        (17, "17:*", True),
+        (99, "17:*", True),
+        (12, "*:17", False),  # same set as "17:*"
+        (5, "3:9", True),
+        (5, "9:3", True),  # order of the bounds does not matter
+        (10, "3:9", False),
+        (4, "3,5", False),
+        (5, "3,5", True),
+        (12, "*", True),  # the last message: left to the server
+        (12, "*:*", True),
+        (12, "1:2,*", True),
+    ],
+)
+def test_uid_in_range(uid: int, uid_range: str, expected: bool) -> None:
+    """UID sets are checked as the caller means them; ``*`` next to a number is only an open upper bound."""
+    assert uid_in_range(uid, uid_range) is expected
+
+
+def test_search_drops_last_message_outside_uid_range(server: FakeImapServer) -> None:
+    """GMX answers "17:*" with the last message (UID 12) when no UID reaches 17: the integration drops it."""
+    server.search_hook = lambda folder, criteria, charset: [12]  # RFC 3501: 17:* == *:17 == 12:17
+    result = _search(server, SearchQuery(uid_range="17:*"))
+    assert result.total == 0 and result.messages == []
+    server.search_hook = lambda folder, criteria, charset: [11, 12]
+    result = _search(server, SearchQuery(uid_range="11:*"))
+    assert result.total == 2 and [m["ref"]["uid"] for m in result.messages] == [12, 11]

@@ -476,7 +476,7 @@
         },
         "uid_range": {
           "name": "UID-Bereich",
-          "description": "IMAP-UID-Menge, z. B. 100:200."
+          "description": "IMAP-UID-Menge, z. B. 100:200 oder 100:* (ab UID 100 aufwärts; ein einzelnes * ist die letzte Mail)."
         },
         "sort": {
           "name": "Sortierung",

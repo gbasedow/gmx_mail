@@ -79,6 +79,7 @@
 | 75 | 2026-11-22 | „Aktionen heute“ zählt jeden erfolgreichen Aufruf genau einmal; Vorschau und Versand sind je ein Aufruf. Teilschritte (Zusammenstellen der Mail) zählen nicht, abgelehnte Aufrufe ebenfalls nicht. Ein Versand mit unbekanntem Ergebnis zählt. | Fehler gefunden beim Test auf der Nutzerinstanz (18 statt 10). Vom Nutzer freigegeben (Version 0.9.1). |
 | 76 | 2026-11-22 | Zeilenumbrüche im Betreff werden im Handler abgelehnt (`invalid_subject`), nicht mehr im Schema (ersetzt den Schema-Teil von Nr. 73). | Schemafehler kommen über die REST-API (ha-mcp) nur als „400: Bad Request“ an. Vom Nutzer freigegeben (Version 0.9.1). |
 | 77 | 2026-11-22 | `set_flags` akzeptiert zusätzlich `\Seen`, `\Flagged`, `\Answered`; eigener Fehlerschlüssel `protected_folder_delete` für das Löschen von Posteingang/Spezialordnern. | Die Suche liefert Markierungen in IMAP-Schreibweise; ein Assistent übernimmt sie so. Vom Nutzer freigegeben (Version 0.9.1). |
+| 78 | 2026-11-22 | Suchtreffer werden zusätzlich in der Integration gegen `uid_range` geprüft: Ein Bereich mit Zahl und `*` gilt als nach oben offen (`17:*` = UID ≥ 17), ein einzelnes `*` bzw. `*:*` bleibt „letzte Mail“. Es wird nur gefiltert, nie ergänzt. | IMAP liefert bei `17:*` die letzte Mail, wenn alle UIDs kleiner sind (RFC 3501 6.4.8); gefunden beim Test auf der Nutzerinstanz (GMX-NOTES Zeile 40). Vom Nutzer freigegeben (Version 0.9.2). |
 
 - `sent_copy_mode` Standard `append`: GMX legt per SMTP keine Gesendet-Kopie an (M0, Lauf 3).
 

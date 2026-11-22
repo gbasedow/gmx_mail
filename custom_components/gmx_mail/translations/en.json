@@ -476,7 +476,7 @@
         },
         "uid_range": {
           "name": "UID range",
-          "description": "IMAP UID set, e.g. 100:200."
+          "description": "IMAP UID set, e.g. 100:200 or 100:* (from UID 100 upwards; a lone * is the last message)."
         },
         "sort": {
           "name": "Sort order",

@@ -22,6 +22,12 @@ def attachment_dir(hass: HomeAssistant, entry_id: str) -> Path:
     return root / MEDIA_SUBDIR / entry_id
 
 
+def outbox_dir(hass: HomeAssistant) -> Path:
+    """Return ``<media>/gmx_mail/outbox``: the only place files for sending are taken from (DECISIONS Nr. 59)."""
+    root = Path(hass.config.media_dirs.get("local") or hass.config.path("media"))
+    return root / MEDIA_SUBDIR / "outbox"
+
+
 def remove_old_files(directory: Path, max_age_days: int, now: float | None = None) -> int:
     """Delete regular files older than ``max_age_days`` directly in ``directory`` (blocking). 0 days = keep all."""
     if max_age_days <= 0 or not directory.is_dir():

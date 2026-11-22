@@ -62,6 +62,7 @@ class AuditLog:
         target: str | None = None,
         params: Any = None,
         error: str | None = None,
+        recipient_domains: list[str] | None = None,
     ) -> dict[str, Any]:
         """Store one entry and fire the event. ``params`` is only hashed, never stored."""
         entry: dict[str, Any] = {
@@ -76,6 +77,8 @@ class AuditLog:
         }
         if error:
             entry["error"] = error
+        if recipient_domains is not None:
+            entry["recipient_domains"] = sorted(set(recipient_domains))  # domains only, never addresses
         self._entries.append(entry)
         self._prune()
         self._store.async_delay_save(lambda: {"entries": list(self._entries)}, SAVE_DELAY_S)

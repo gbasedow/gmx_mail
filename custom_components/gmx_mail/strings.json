@@ -86,13 +86,15 @@
               "send_mode": "Send mode",
               "allowlist": "Allowed recipients",
               "allow_reply_to_sender": "Allow replies to the original sender",
-              "sent_copy_mode": "Copy in the Sent folder"
+              "sent_copy_mode": "Copy in the Sent folder",
+              "sender_name": "Sender name"
             },
             "data_description": {
               "send_mode": "Off: no sending. Allowlist: only listed recipients. Any recipient: requires the entry * in the list.",
               "allowlist": "Exact addresses or *@domain. An empty list blocks sending. Enter * only together with the mode 'Any recipient'.",
               "allow_reply_to_sender": "Replies to the sender of a message even if the sender is not on the allowlist.",
-              "sent_copy_mode": "GMX does not store a copy of messages sent via SMTP, so the integration appends one."
+              "sent_copy_mode": "GMX does not store a copy of messages sent via SMTP, so the integration appends one.",
+              "sender_name": "Shown as the name next to the account address (optional). The address itself is always the account address."
             }
           },
           "limits_section": {
@@ -101,7 +103,13 @@
             "data": {
               "max_recipients": "Maximum recipients per message",
               "max_send_per_day": "Maximum messages sent per day",
-              "max_delete_per_day": "Maximum deletions per day"
+              "max_delete_per_day": "Maximum deletions per day",
+              "max_recipients_per_hour": "Maximum recipients per hour",
+              "max_message_size_mb": "Maximum message size"
+            },
+            "data_description": {
+              "max_recipients_per_hour": "GMX is said to allow about 11 recipients per hour from mail programs (unconfirmed); the default stays below.",
+              "max_message_size_mb": "Including attachments. GMX FreeMail allows 20 MB, ProMail 50 MB, TopMail 100 MB."
             }
           },
           "connection_section": {
@@ -148,7 +156,8 @@
       "wildcard_requires_any": "The entry * is only allowed with the send mode 'Any recipient'.",
       "any_requires_wildcard": "The send mode 'Any recipient' must be confirmed by adding the entry * to the allowlist.",
       "invalid_sent_copy_mode": "Unknown mode for the Sent copy.",
-      "out_of_range": "A value is outside the allowed range."
+      "out_of_range": "A value is outside the allowed range.",
+      "invalid_sender_name": "The sender name may have at most 100 characters and must not contain <, > or quotation marks."
     }
   },
   "selector": {
@@ -309,6 +318,45 @@
     },
     "daily_delete_limit": {
       "message": "Daily deletion limit of {limit} messages reached ({remaining} left today)."
+    },
+    "sending_disabled": {
+      "message": "Sending is switched off for this account (send mode off or empty allowlist)."
+    },
+    "no_recipients": {
+      "message": "The message has no recipients."
+    },
+    "too_many_recipients": {
+      "message": "More than {limit} recipients per message are not allowed."
+    },
+    "recipient_not_allowed": {
+      "message": "{count} recipient(s) are not allowed by the send mode or allowlist (domains: {domains})."
+    },
+    "daily_send_limit": {
+      "message": "Daily limit of {limit} sent messages reached."
+    },
+    "hourly_recipient_limit": {
+      "message": "Hourly limit of {limit} recipients reached ({remaining} left in the current hour)."
+    },
+    "attachment_not_allowed": {
+      "message": "Attachments must be plain file names in the outbox folder <media>/gmx_mail/outbox."
+    },
+    "attachment_missing": {
+      "message": "The file {name} is not in the outbox folder (or is not a regular file)."
+    },
+    "smtp_auth_failed": {
+      "message": "GMX rejected the SMTP login. Reauthenticate the integration (a repair notice was created)."
+    },
+    "smtp_sender_rejected": {
+      "message": "GMX refused the sender address. Nothing was sent."
+    },
+    "smtp_recipient_rejected": {
+      "message": "GMX refused at least one recipient. Nothing was sent."
+    },
+    "smtp_message_rejected": {
+      "message": "GMX refused the message (for example size, content or a sending limit). Nothing was sent."
+    },
+    "not_a_draft": {
+      "message": "Only messages in the drafts folder that are marked as draft can be sent with send_draft."
     }
   },
   "issues": {
@@ -327,6 +375,10 @@
     "server_rules_unavailable": {
       "title": "GMX filter rules cannot be managed",
       "description": "GMX offers no interface for the filter rules of the web mailer (no ManageSieve, not visible via IMAP). The GMX Mail integration therefore cannot read or change these rules. You can ignore this notice."
+    },
+    "smtp_auth_failed": {
+      "title": "GMX rejected the SMTP login for {account}",
+      "description": "Sending failed because GMX rejected the SMTP login. The app password may have been deleted or changed.\n\n1. If needed, create a new app password in the GMX account under Login & security > App passwords.\n2. Reauthenticate the integration under Settings > Devices & services.\n\nNothing was sent."
     }
   },
   "services": {
@@ -721,6 +773,130 @@
         "path": {
           "name": "Folder",
           "description": "Path of the folder; the inbox and special folders are protected."
+        },
+        "confirm_token": {
+          "name": "Confirmation code",
+          "description": "Leave empty for the preview; then pass the code from the preview (valid 5 minutes, once)."
+        }
+      }
+    },
+    "send_message": {
+      "name": "Send message",
+      "description": "Sends a new message. Without a code it only returns a preview and a confirmation code. Needs the Send level and a send mode other than off.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The GMX Mail config entry."
+        },
+        "to": {
+          "name": "To",
+          "description": "Recipients (address or Name <address>); each must be allowed by the send mode."
+        },
+        "cc": {
+          "name": "Cc",
+          "description": "Copy recipients; same rules as To."
+        },
+        "bcc": {
+          "name": "Bcc",
+          "description": "Blind copy recipients; same rules as To."
+        },
+        "subject": {
+          "name": "Subject",
+          "description": "Subject line."
+        },
+        "body_text": {
+          "name": "Text",
+          "description": "Message text (plain text)."
+        },
+        "body_html": {
+          "name": "HTML",
+          "description": "Optional HTML version of the text."
+        },
+        "attachments": {
+          "name": "Attachments",
+          "description": "File names in the folder <media>/gmx_mail/outbox (no paths), at most 20."
+        },
+        "confirm_token": {
+          "name": "Confirmation code",
+          "description": "Leave empty for the preview; then pass the code from the preview (valid 5 minutes, once)."
+        }
+      }
+    },
+    "reply": {
+      "name": "Reply",
+      "description": "Replies to a message (to Reply-To if present, else to the sender) and marks it answered. Without a code only a preview and a code.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The GMX Mail config entry."
+        },
+        "ref": {
+          "name": "Message",
+          "description": "Reference of the original message (folder, uid, uidvalidity)."
+        },
+        "body_text": {
+          "name": "Text",
+          "description": "Reply text; the quote is added below it."
+        },
+        "reply_all": {
+          "name": "Reply to all",
+          "description": "Also to all To/Cc recipients of the original (each must be on the allowlist)."
+        },
+        "quote": {
+          "name": "Quote",
+          "description": "Quote the cleaned text of the original (at most 20,000 characters)."
+        },
+        "confirm_token": {
+          "name": "Confirmation code",
+          "description": "Leave empty for the preview; then pass the code from the preview (valid 5 minutes, once)."
+        }
+      }
+    },
+    "forward": {
+      "name": "Forward",
+      "description": "Forwards a message inline with its attachments. Without a code only a preview and a code.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The GMX Mail config entry."
+        },
+        "ref": {
+          "name": "Message",
+          "description": "Reference of the original message (folder, uid, uidvalidity)."
+        },
+        "to": {
+          "name": "To",
+          "description": "Recipients of the forwarded message; each must be allowed by the send mode."
+        },
+        "cc": {
+          "name": "Cc",
+          "description": "Copy recipients; same rules as To."
+        },
+        "comment": {
+          "name": "Comment",
+          "description": "Text above the forwarded message."
+        },
+        "include_attachments": {
+          "name": "Include attachments",
+          "description": "Forward the attachments of the original too."
+        },
+        "confirm_token": {
+          "name": "Confirmation code",
+          "description": "Leave empty for the preview; then pass the code from the preview (valid 5 minutes, once)."
+        }
+      }
+    },
+    "send_draft": {
+      "name": "Send draft",
+      "description": "Sends a draft from the drafts folder and removes it there. Without a code only a preview and a code.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The GMX Mail config entry."
+        },
+        "ref": {
+          "name": "Draft",
+          "description": "Reference of the draft in the drafts folder (folder, uid, uidvalidity)."
         },
         "confirm_token": {
           "name": "Confirmation code",

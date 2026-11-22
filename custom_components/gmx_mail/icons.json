@@ -50,6 +50,18 @@
     },
     "delete_folder": {
       "service": "mdi:folder-remove-outline"
+    },
+    "send_message": {
+      "service": "mdi:email-send-outline"
+    },
+    "reply": {
+      "service": "mdi:reply-outline"
+    },
+    "forward": {
+      "service": "mdi:share-outline"
+    },
+    "send_draft": {
+      "service": "mdi:email-fast-outline"
     }
   },
   "entity": {

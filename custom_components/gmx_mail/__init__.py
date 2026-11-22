@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import ssl
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
@@ -47,6 +48,7 @@ from .const import (
     ISSUE_FOLDER_MAPPING_AMBIGUOUS,
     ISSUE_IMAP_POSSIBLY_DISABLED,
     ISSUE_SERVER_RULES_UNAVAILABLE,
+    ISSUE_SMTP_AUTH_FAILED,
     ISSUE_UIDVALIDITY_CHANGED,
     PushState,
     Security,
@@ -77,6 +79,9 @@ class GmxMailRuntimeData:
     counter: ActionCounter
     audit: AuditLog
     tokens: ConfirmTokens = field(default_factory=ConfirmTokens)  # in-memory key: codes die with the entry
+    smtp_settings: SmtpSettings | None = None
+    tls_context: Callable[[], ssl.SSLContext] | None = None  # blocking factory (loads certificates)
+    send_lock: asyncio.Lock = field(default_factory=asyncio.Lock)  # one send at a time: limits stay exact
     idle: IdleWatcher | None = None
     push_unavailable: PushState | None = None  # DISABLED or UNSUPPORTED when no watcher runs
 
@@ -116,6 +121,26 @@ def smtp_settings_from_data(data: Mapping[str, Any]) -> SmtpSettings:
 def create_tls_context() -> ssl.SSLContext:
     """Return a new verifying TLS context (certifi bundle, TLS >= 1.2). Blocking: loads certificates."""
     return tls_context_with_minimum(create_client_context())
+
+
+def smtp_issue_id(entry: ConfigEntry) -> str:
+    """Return the repair issue id for a rejected SMTP login."""
+    return f"{ISSUE_SMTP_AUTH_FAILED}_{entry.entry_id}"
+
+
+@callback
+def async_smtp_auth_failed(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """SMTP rejected the login while sending: repair issue and reauthentication (same app password as IMAP)."""
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        smtp_issue_id(entry),
+        is_fixable=False,
+        severity=ir.IssueSeverity.ERROR,
+        translation_key=ISSUE_SMTP_AUTH_FAILED,
+        translation_placeholders={"account": entry.title},
+    )
+    entry.async_start_reauth(hass)
 
 
 def issue_id(entry: ConfigEntry) -> str:
@@ -168,6 +193,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: GmxMailConfigEntry) -> b
         raise ConfigEntryNotReady(translation_domain=DOMAIN, translation_key="cannot_connect") from err
 
     ir.async_delete_issue(hass, DOMAIN, issue_id(entry))
+    ir.async_delete_issue(hass, DOMAIN, smtp_issue_id(entry))  # a reauth (new password) reloads the entry
 
     @callback
     def _auth_failed() -> None:
@@ -200,6 +226,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: GmxMailConfigEntry) -> b
         coordinator=coordinator,
         counter=counter,
         audit=audit,
+        smtp_settings=smtp_settings_from_data(entry.data),
+        tls_context=create_tls_context,
     )
     try:
         await coordinator.async_config_entry_first_refresh()
@@ -335,7 +363,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: GmxMailConfigEntry) -> 
 
 async def async_remove_entry(hass: HomeAssistant, entry: GmxMailConfigEntry) -> None:
     """Remove leftovers of a deleted config entry (repairs, stored counters and UID state)."""
-    for issue in (issue_id(entry), f"{ISSUE_FOLDER_MAPPING_AMBIGUOUS}_{entry.entry_id}", f"{ISSUE_UIDVALIDITY_CHANGED}_{entry.entry_id}"):
+    for issue in (
+        issue_id(entry),
+        smtp_issue_id(entry),
+        f"{ISSUE_FOLDER_MAPPING_AMBIGUOUS}_{entry.entry_id}",
+        f"{ISSUE_UIDVALIDITY_CHANGED}_{entry.entry_id}",
+    ):
         ir.async_delete_issue(hass, DOMAIN, issue)
     if not hass.config_entries.async_entries(DOMAIN):
         ir.async_delete_issue(hass, DOMAIN, ISSUE_SERVER_RULES_UNAVAILABLE)

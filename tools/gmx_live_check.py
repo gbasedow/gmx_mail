@@ -8,6 +8,7 @@ Answers the open M4 questions (SPEC section 7) with the code that Home Assistant
   * MOVE/COPY: new references from COPYUID or only via the Message-ID fallback;
   * draft APPEND to Entwürfe with APPENDUID;
   * deleting (M5): one own test message to the trash, preview, permanent deletion there, then verify it is gone;
+  * sending (M6, only with ``--send-self-test``): ONE message to the own address, Sent copy, arrival in the INBOX;
   * IDLE: notification for a new message and - with ``--idle-minutes 35`` - GMX's ``* BYE timeout`` and the reconnect.
 
 Safety rules (same as tools/gmx_probe.py):
@@ -57,7 +58,8 @@ def _load_client() -> types.SimpleNamespace:
             module.__path__ = [str(path)]
             sys.modules[name] = module
     names = ("const", "client", "client.errors", "client.folders", "client.sanitize", "client.structure", "client.imap")
-    names += ("client.reader", "client.writer", "client.deleter", "client.idle")
+    names += ("client.reader", "client.writer", "client.deleter", "client.policy", "client.composer", "client.sent", "client.smtp")
+    names += ("client.idle",)
     loaded = {}
     for short in names:
         full = f"custom_components.gmx_mail.{short}"
@@ -112,6 +114,8 @@ def run_checks(args: argparse.Namespace, user: str, password: str) -> dict[str, 
         finally:
             with contextlib.suppress(Exception):
                 session.logout()
+        if args.send_self_test:
+            report["send"] = _send_check(c, settings, context, user, password, marker, args)
         report["idle"] = asyncio.run(_idle_check(c, settings, context, user, marker, args.idle_minutes))
     except Exception as err:  # noqa: BLE001 - recorded in the report; clean-up still runs
         report["aborted"] = type(err).__name__
@@ -182,6 +186,47 @@ def _delete_check(c: Any, session: Any, info: Any, folder_map: Any, ref: Any) ->
     still_there = in_trash.uid in session.fetch([in_trash.uid], ["FLAGS"])
     session.unselect_folder()
     result |= {"preview_count": preview["count"], "deleted": deleted.count, "warnings": deleted.warnings, "gone": not still_there}
+    return result
+
+
+def _send_check(c: Any, settings: Any, context: ssl.SSLContext, user: str, password: str, marker: str, args: Any) -> dict[str, Any]:
+    """M6 (only with --send-self-test): ONE message to the own address over SMTP, Sent copy (mode auto: is there a
+    server copy?), then wait for it in the INBOX. Never another recipient; the clean-up removes both copies."""
+    outgoing = c.composer.new_message(
+        sender=user,
+        sender_name="",
+        to=[user],
+        cc=[],
+        bcc=[],
+        subject=f"gmx_mail live check send {marker}",
+        body_text="Selbsttest der Integration gmx_mail (Live-Check). Diese Nachricht wird automatisch entfernt.",
+        body_html=None,
+        attachments=[],
+    )
+    message_id = f"<{marker}-send{MESSAGE_ID_DOMAIN}>"  # found again by the clean-up
+    del outgoing.message["Message-ID"]
+    outgoing.message["Message-ID"] = message_id
+    smtp = c.smtp.SmtpSettings(
+        host=args.smtp_host, port=args.smtp_port, security=c.const.Security.STARTTLS, username=user, password=password
+    )
+    started = time.monotonic()
+    c.smtp.send_message(smtp, context, user, [user], outgoing.wire_bytes)
+    result: dict[str, Any] = {"sent": True}
+    session = c.imap.open_imap_connection(settings, context)
+    try:
+        info = c.imap.probe_server(session)
+        roles = c.folders.map_special_folders(info.folders)
+        result["sent_copy"] = c.sent.store_sent_copy(session, info, roles, outgoing.copy_bytes, message_id=message_id, mode="auto")
+        arrived = None
+        while time.monotonic() - started < args.arrival_timeout and arrived is None:
+            if _own_messages(session, "INBOX", lambda mid, _s, _f: mid == message_id):
+                arrived = round(time.monotonic() - started, 1)
+            else:
+                time.sleep(2)
+        result["arrived_after_s"] = arrived
+    finally:
+        with contextlib.suppress(Exception):
+            session.logout()
     return result
 
 
@@ -282,7 +327,15 @@ def _cleanup(c: Any, settings: Any, context: ssl.SSLContext, prefix: str, marker
     Only data the tool itself creates is matched: folders ``<prefix>-…``, INBOX messages with the Message-ID
     ``<…@gmx-mail-live-check>`` and drafts flagged ``\\Draft`` whose subject starts with the draft subject.
     """
-    result: dict[str, Any] = {"ok": False, "errors": [], "folders_deleted": 0, "inbox_deleted": 0, "trash_deleted": 0, "drafts_deleted": 0}
+    result: dict[str, Any] = {
+        "ok": False,
+        "errors": [],
+        "folders_deleted": 0,
+        "inbox_deleted": 0,
+        "trash_deleted": 0,
+        "sent_deleted": 0,
+        "drafts_deleted": 0,
+    }
     tag = f"{prefix}-{marker}" if marker else f"{prefix}-"
     try:
         session = c.imap.open_imap_connection(settings, context)
@@ -301,6 +354,7 @@ def _cleanup(c: Any, settings: Any, context: ssl.SSLContext, prefix: str, marker
             ("folders", None, None),
             ("inbox", "INBOX", own_message_id),
             ("trash", roles.get(c.const.FolderRole.TRASH), own_message_id),  # left there if the delete check was cut short
+            ("sent", roles.get(c.const.FolderRole.SENT), own_message_id),  # copy of the send self-test
             (
                 "drafts",
                 drafts_folder,
@@ -343,6 +397,10 @@ def main() -> int:
     parser.add_argument("--folder-prefix", default="HA-Live")
     parser.add_argument("--output", help="write the JSON report to this file (UTF-8) instead of standard output")
     parser.add_argument("--cleanup-only", action="store_true", help="only remove test data left behind by earlier runs, then exit")
+    parser.add_argument("--send-self-test", action="store_true", help="also send ONE message to the own address (M6) and remove it")
+    parser.add_argument("--smtp-host", default="mail.gmx.net")
+    parser.add_argument("--smtp-port", type=int, default=587)
+    parser.add_argument("--arrival-timeout", type=float, default=90.0, help="seconds to wait for the self-test message in the INBOX")
     args = parser.parse_args()
     user, password = os.environ.get("GMX_USER"), os.environ.get("GMX_PASS")
     if not user or not password:

@@ -1,4 +1,4 @@
-"""Home Assistant actions of GMX Mail: reading (M2, level R), organising (M4, level O) and deleting (M5, level D).
+"""Home Assistant actions of GMX Mail: reading (M2, R), organising (M4, O), deleting (M5, D) and sending (M6, S).
 
 All actions take ``config_entry_id`` in the service data (ha-mcp's ``ha_call_service`` has no ``target``).
 Errors are raised as ``ServiceValidationError``/``HomeAssistantError`` with a translation key, never returned
@@ -25,7 +25,17 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import service
 from imapclient.exceptions import IMAPClientError
 
-from .attachments import attachment_dir
+from .attachments import attachment_dir, outbox_dir
+from .client.composer import (
+    Attachment,
+    Outgoing,
+    addr_specs,
+    forward_message,
+    load_draft,
+    load_original,
+    new_message,
+    reply_message,
+)
 from .client.deleter import check_delete_folder, delete_folder, delete_permanently, preview_permanent, trash
 from .client.errors import (
     GmxAttachmentTooLargeError,
@@ -43,12 +53,19 @@ from .client.errors import (
     GmxPartNotFoundError,
     GmxProtectedFolderError,
     GmxSearchRejectedError,
+    GmxSendInputError,
+    GmxSmtpAuthError,
+    GmxSmtpRejectedError,
+    GmxTlsError,
     GmxUidValidityError,
     GmxUnsupportedError,
 )
 from .client.imap import ImapSession
+from .client.policy import RecipientPolicy, domain_of
 from .client.reader import MailRef, SearchQuery, get_attachment, get_message, list_folders, search, unseen_count
 from .client.sanitize import clean_inline, frame_untrusted, new_nonce
+from .client.sent import mark_answered, remove_draft, store_sent_copy
+from .client.smtp import send_message
 from .client.writer import (
     DraftInput,
     copy_or_move,
@@ -63,19 +80,25 @@ from .confirm import InvalidTokenError
 from .const import (
     CONF_ALLOW_HTML_OUTPUT,
     CONF_ALLOW_PERMANENT_DELETE,
+    CONF_ALLOW_REPLY_TO_SENDER,
     CONF_ALLOWLIST,
     CONF_EMAIL,
     CONF_MAX_DELETE_PER_DAY,
+    CONF_MAX_MESSAGE_SIZE_MB,
     CONF_MAX_RECIPIENTS,
+    CONF_MAX_RECIPIENTS_PER_HOUR,
     CONF_MAX_SEND_PER_DAY,
     CONF_PERMISSIONS,
     CONF_SEND_MODE,
+    CONF_SENDER_NAME,
+    CONF_SENT_COPY_MODE,
     DOMAIN,
     MAX_DELETE_PER_CALL,
     MAX_REFS_PER_CALL,
     FolderRole,
     Permission,
     PushState,
+    SentCopyMode,
 )
 from .envelope import InvalidCursorError, build_envelope, decode_cursor, encode_cursor, fit_list, fit_text, query_hash
 
@@ -100,6 +123,11 @@ SERVICE_SAVE_DRAFT = "save_draft"
 SERVICE_TRASH = "trash"
 SERVICE_DELETE_PERMANENTLY = "delete_permanently"
 SERVICE_DELETE_FOLDER = "delete_folder"
+SERVICE_SEND_MESSAGE = "send_message"
+SERVICE_REPLY = "reply"
+SERVICE_FORWARD = "forward"
+SERVICE_SEND_DRAFT = "send_draft"
+MAX_ATTACHMENTS = 20
 MAX_DRAFT_TEXT = 1_000_000
 
 MAX_TEXT_CRITERION = 200
@@ -210,7 +238,7 @@ _ERROR_KEYS: tuple[tuple[type[Exception], str, bool], ...] = (
 
 def _translate(err: Exception, folder: str | None = None) -> HomeAssistantError:
     """Map client errors to Home Assistant errors with translation keys (never error fields in responses)."""
-    if isinstance(err, GmxUnsupportedError | GmxInvalidFolderNameError | GmxDeleteRuleError):
+    if isinstance(err, GmxUnsupportedError | GmxInvalidFolderNameError | GmxDeleteRuleError | GmxSendInputError):
         return ServiceValidationError(translation_domain=DOMAIN, translation_key=err.reason)
     for error_type, key, validation in _ERROR_KEYS:
         if isinstance(err, error_type):
@@ -646,8 +674,8 @@ DELETE_PERMANENTLY_SCHEMA = vol.Schema({**_ENTRY, vol.Required("refs"): _DELETE_
 DELETE_FOLDER_SCHEMA = vol.Schema({**_ENTRY, vol.Required("path"): _FOLDER, vol.Optional("confirm_token"): _TOKEN})
 
 
-def _audited_delete(action: str) -> Callable[[_Handler], _Handler]:
-    """Record refused deleting calls in the audit log too (who tried what is worth knowing); content-free."""
+def _audited(action: str, level: Permission) -> Callable[[_Handler], _Handler]:
+    """Record refused deleting/sending calls in the audit log too (who tried what is worth knowing); content-free."""
 
     def wrap(handler: _Handler) -> _Handler:
         async def inner(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
@@ -658,9 +686,7 @@ def _audited_delete(action: str) -> Callable[[_Handler], _Handler]:
                 runtime = getattr(entry, "runtime_data", None) if entry is not None and entry.domain == DOMAIN else None
                 if runtime is not None and hasattr(runtime, "audit"):
                     params = {k: v for k, v in call.data.items() if k not in (ATTR_CONFIG_ENTRY_ID, "confirm_token")}
-                    runtime.audit.record(
-                        action=action, level=Permission.DELETE.value, outcome="rejected", params=params, error=err.translation_key
-                    )
+                    runtime.audit.record(action=action, level=level.value, outcome="rejected", params=params, error=err.translation_key)
                 raise
 
         return inner
@@ -692,7 +718,7 @@ def _consume(entry: ConfigEntry, token: str, action: str, params: Any) -> None:
         raise ServiceValidationError(translation_domain=DOMAIN, translation_key="confirm_token_invalid") from err
 
 
-@_audited_delete(SERVICE_TRASH)
+@_audited(SERVICE_TRASH, Permission.DELETE)
 async def _trash(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
     entry = _entry(hass, call, Permission.DELETE)
     data = entry.runtime_data
@@ -723,7 +749,7 @@ async def _trash(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
     return _write_envelope(entry, SERVICE_TRASH, body, result.warnings)
 
 
-@_audited_delete(SERVICE_DELETE_PERMANENTLY)
+@_audited(SERVICE_DELETE_PERMANENTLY, Permission.DELETE)
 async def _delete_permanently(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
     entry = _entry(hass, call, Permission.DELETE)
     data = entry.runtime_data
@@ -769,7 +795,7 @@ async def _delete_permanently(hass: HomeAssistant, call: ServiceCall) -> Service
     return _write_envelope(entry, SERVICE_DELETE_PERMANENTLY, {"deleted": result.count, "missing": result.missing}, result.warnings)
 
 
-@_audited_delete(SERVICE_DELETE_FOLDER)
+@_audited(SERVICE_DELETE_FOLDER, Permission.DELETE)
 async def _delete_folder(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
     entry = _entry(hass, call, Permission.DELETE)
     data = entry.runtime_data
@@ -795,6 +821,307 @@ async def _delete_folder(hass: HomeAssistant, call: ServiceCall) -> ServiceRespo
     return _write_envelope(entry, SERVICE_DELETE_FOLDER, {"deleted_folder": deleted})
 
 
+# --------------------------------------------------------------------------- sending (M6, level S)
+
+_RECIPIENTS = vol.All(cv.ensure_list, vol.Length(max=100), [vol.All(cv.string, vol.Length(min=3, max=320))])
+_FILE_NAMES = vol.All(cv.ensure_list, vol.Length(max=MAX_ATTACHMENTS), [vol.All(cv.string, vol.Length(min=1, max=255))])
+_BODY = vol.All(cv.string, vol.Length(max=MAX_DRAFT_TEXT))
+SEND_MESSAGE_SCHEMA = vol.Schema(
+    {
+        **_ENTRY,
+        vol.Optional("to", default=list): _RECIPIENTS,
+        vol.Optional("cc", default=list): _RECIPIENTS,
+        vol.Optional("bcc", default=list): _RECIPIENTS,
+        vol.Optional("subject", default=""): vol.All(cv.string, vol.Length(max=998)),
+        vol.Optional("body_text", default=""): _BODY,
+        vol.Optional("body_html"): _BODY,
+        vol.Optional("attachments", default=list): _FILE_NAMES,
+        vol.Optional("confirm_token"): _TOKEN,
+    }
+)
+REPLY_SCHEMA = vol.Schema(
+    {
+        **_ENTRY,
+        vol.Required("ref"): REF_SCHEMA,
+        vol.Required("body_text"): _BODY,
+        vol.Optional("reply_all", default=False): cv.boolean,
+        vol.Optional("quote", default=True): cv.boolean,
+        vol.Optional("confirm_token"): _TOKEN,
+    }
+)
+FORWARD_SCHEMA = vol.Schema(
+    {
+        **_ENTRY,
+        vol.Required("ref"): REF_SCHEMA,
+        vol.Required("to"): vol.All(_RECIPIENTS, vol.Length(min=1)),
+        vol.Optional("cc", default=list): _RECIPIENTS,
+        vol.Optional("comment", default=""): _BODY,
+        vol.Optional("include_attachments", default=True): cv.boolean,
+        vol.Optional("confirm_token"): _TOKEN,
+    }
+)
+SEND_DRAFT_SCHEMA = vol.Schema({**_ENTRY, vol.Required("ref"): REF_SCHEMA, vol.Optional("confirm_token"): _TOKEN})
+
+_SMTP_ERROR_KEYS = {
+    "message_too_large": "message_too_large",
+    "sender_rejected": "smtp_sender_rejected",
+    "recipient_rejected": "smtp_recipient_rejected",
+    "message_rejected": "smtp_message_rejected",
+}
+
+
+def _max_bytes(entry: ConfigEntry) -> int:
+    return int(entry.runtime_data.options[CONF_MAX_MESSAGE_SIZE_MB]) * 1024 * 1024
+
+
+def _sender(entry: ConfigEntry) -> tuple[str, str]:
+    return str(entry.data[CONF_EMAIL]), str(entry.runtime_data.options.get(CONF_SENDER_NAME) or "")
+
+
+def _read_outbox(directory: Path, names: list[str], max_bytes: int) -> list[Attachment]:
+    """Load files from the outbox folder only: plain names, regular files, no symlinks (blocking)."""
+    base = directory.resolve()
+    files: list[Attachment] = []
+    total = 0
+    for name in names:
+        if name != Path(name).name or name.startswith(".") or "\\" in name:
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="attachment_not_allowed")
+        path = directory / name
+        if path.is_symlink() or not path.is_file() or path.resolve().parent != base:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="attachment_missing", translation_placeholders={"name": clean_inline(name, 100)}
+            )
+        total += path.stat().st_size
+        if total > max_bytes:
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="message_too_large")
+        files.append(Attachment(name, path.read_bytes()))
+    return files
+
+
+def _smtp_job(entry: ConfigEntry, recipients: list[str], data: bytes) -> None:
+    runtime = entry.runtime_data
+    assert runtime.smtp_settings is not None and runtime.tls_context is not None
+    send_message(runtime.smtp_settings, runtime.tls_context(), runtime.smtp_settings.username, recipients, data)
+
+
+def _check_send_limits(entry: ConfigEntry, outgoing: Outgoing, policy: RecipientPolicy) -> None:
+    options = entry.runtime_data.options
+    counter = entry.runtime_data.counter
+    recipients = outgoing.recipients
+
+    def refuse(key: str, **placeholders: Any) -> ServiceValidationError:
+        return ServiceValidationError(
+            translation_domain=DOMAIN, translation_key=key, translation_placeholders={k: str(v) for k, v in placeholders.items()} or None
+        )
+
+    if not recipients:
+        raise refuse("no_recipients")
+    if len(recipients) > int(options[CONF_MAX_RECIPIENTS]):
+        raise refuse("too_many_recipients", limit=options[CONF_MAX_RECIPIENTS])
+    blocked = policy.blocked(recipients, original_sender=outgoing.original_sender)
+    if blocked:
+        # Count and domains only: the message ends up in logs and in the assistant's context.
+        raise refuse("recipient_not_allowed", count=len(blocked), domains=", ".join(sorted({domain_of(b) for b in blocked})))
+    if counter.sent_today + 1 > int(options[CONF_MAX_SEND_PER_DAY]):
+        raise refuse("daily_send_limit", limit=options[CONF_MAX_SEND_PER_DAY])
+    per_hour = int(options[CONF_MAX_RECIPIENTS_PER_HOUR])
+    used = counter.recipients_last_hour()
+    if used + len(recipients) > per_hour:
+        raise refuse("hourly_recipient_limit", limit=per_hour, remaining=max(0, per_hour - used))
+    append_limit = entry.runtime_data.server_info.append_limit
+    copy_needed = options[CONF_SENT_COPY_MODE] != SentCopyMode.NONE
+    if len(outgoing.wire_bytes) > _max_bytes(entry) or (copy_needed and append_limit and len(outgoing.copy_bytes) > append_limit):
+        raise refuse("message_too_large")
+
+
+async def _send_flow(
+    hass: HomeAssistant, entry: ConfigEntry, call: ServiceCall, action: str, *, job: Callable[[ImapSession], Outgoing], params: Any
+) -> ServiceResponse:
+    """Shared flow: compose, check rules and limits, preview + code, send once, then Sent copy and follow-up steps."""
+    data = entry.runtime_data
+    options = data.options
+    policy = RecipientPolicy(str(options[CONF_SEND_MODE]), list(options[CONF_ALLOWLIST]), bool(options[CONF_ALLOW_REPLY_TO_SENDER]))
+    if not policy.sending_enabled:
+        raise ServiceValidationError(translation_domain=DOMAIN, translation_key="sending_disabled")
+
+    def compose(session: ImapSession) -> Outgoing:
+        try:
+            return job(session)
+        except ValueError as err:  # an address the email library rejects (also in originals and drafts)
+            raise GmxSendInputError("invalid_address") from err
+
+    async with data.send_lock:
+        outgoing = await _run(entry, compose, level=Permission.SEND)
+        _check_send_limits(entry, outgoing, policy)
+        domains = sorted({domain_of(r) for r in outgoing.recipients})
+        token = call.data.get("confirm_token")
+        if not token:
+            preview = outgoing.preview() | {"sent_copy_mode": options[CONF_SENT_COPY_MODE]}
+            data.audit.record(
+                action=action,
+                level=Permission.SEND.value,
+                outcome="preview",
+                count=len(outgoing.recipients),
+                params=params,
+                recipient_domains=domains,
+            )
+            body = {"preview": preview, "confirm_token": data.tokens.issue(action, params), "expires_in": data.tokens.ttl}
+            return build_envelope(account=entry.title, action=action, data=body)
+        _consume(entry, token, action, params)
+        audit_args: dict[str, Any] = {
+            "action": action,
+            "level": Permission.SEND.value,
+            "count": len(outgoing.recipients),
+            "params": params,
+            "recipient_domains": domains,
+        }
+        try:
+            await hass.async_add_executor_job(_smtp_job, entry, outgoing.recipients, outgoing.wire_bytes)
+        except GmxOutcomeUnknownError as err:
+            data.audit.record(outcome="unknown", **audit_args)
+            data.counter.add_sent(len(outgoing.recipients))  # may have gone out: count it, never resend
+            raise HomeAssistantError(translation_domain=DOMAIN, translation_key="outcome_unknown") from err
+        except GmxSmtpAuthError as err:
+            from . import async_smtp_auth_failed  # noqa: PLC0415 - the package imports this module
+
+            data.audit.record(outcome="error", error="smtp_auth_failed", **audit_args)
+            async_smtp_auth_failed(hass, entry)
+            raise HomeAssistantError(translation_domain=DOMAIN, translation_key="smtp_auth_failed") from err
+        except GmxSmtpRejectedError as err:
+            key = _SMTP_ERROR_KEYS.get(err.reason, "smtp_message_rejected")
+            data.audit.record(outcome="error", error=key, **audit_args)
+            raise HomeAssistantError(translation_domain=DOMAIN, translation_key=key) from err
+        except (GmxConnectionError, GmxTlsError) as err:
+            data.audit.record(outcome="error", error=type(err).__name__, **audit_args)
+            raise HomeAssistantError(translation_domain=DOMAIN, translation_key="cannot_connect") from err
+        data.counter.add_sent(len(outgoing.recipients))
+        data.counter.increment(Permission.SEND.value)
+    return await _after_send(entry, action, outgoing, audit_args)
+
+
+async def _after_send(entry: ConfigEntry, action: str, outgoing: Outgoing, audit_args: dict[str, Any]) -> ServiceResponse:
+    """IMAP follow-up steps; a failure here is a warning - the message is out and is never sent again."""
+    data = entry.runtime_data
+    message_id = str(outgoing.message["Message-ID"])
+    warnings: list[str] = []
+    try:
+        sent_copy = await data.worker.async_run(
+            lambda s: store_sent_copy(
+                s,
+                data.server_info,
+                data.folder_map,
+                outgoing.copy_bytes,
+                message_id=message_id,
+                mode=str(data.options[CONF_SENT_COPY_MODE]),
+            ),
+            readonly=False,
+        )
+    except GmxMailError, IMAPClientError:
+        sent_copy = "failed"
+    if sent_copy in ("failed", "no_sent_folder"):
+        warnings.append("sent_copy_failed")
+    if outgoing.answered is not None:
+        answered = outgoing.answered
+        try:
+            if not await data.worker.async_run(lambda s: mark_answered(s, data.server_info, answered), readonly=False):
+                warnings.append("original_not_found")
+        except GmxMailError, IMAPClientError:
+            warnings.append("answered_flag_failed")
+    if outgoing.draft is not None:
+        draft = outgoing.draft
+        try:
+            if not await data.worker.async_run(lambda s: remove_draft(s, data.server_info, draft), readonly=False):
+                warnings.append("draft_not_removed")
+        except GmxMailError, IMAPClientError:
+            warnings.append("draft_not_removed")
+    data.audit.record(outcome="ok", **audit_args)
+    body = {"message_id": message_id, "recipients": len(outgoing.recipients), "sent_copy": sent_copy}
+    return _write_envelope(entry, action, body, warnings)
+
+
+def _invalid_address() -> ServiceValidationError:
+    return ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_address")
+
+
+@_audited(SERVICE_SEND_MESSAGE, Permission.SEND)
+async def _send_message(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
+    entry = _entry(hass, call, Permission.SEND)
+    sender, sender_name = _sender(entry)
+    files = await hass.async_add_executor_job(_read_outbox, outbox_dir(hass), list(call.data["attachments"]), _max_bytes(entry))
+    try:
+        outgoing = new_message(
+            sender=sender,
+            sender_name=sender_name,
+            to=call.data["to"],
+            cc=call.data["cc"],
+            bcc=call.data["bcc"],
+            subject=call.data["subject"],
+            body_text=call.data["body_text"],
+            body_html=call.data.get("body_html"),
+            attachments=files,
+        )
+    except ValueError as err:
+        raise _invalid_address() from err
+    params = {k: v for k, v in call.data.items() if k not in (ATTR_CONFIG_ENTRY_ID, "confirm_token")}
+    params["attachment_sha256"] = [hashlib.sha256(f.content).hexdigest() for f in files]  # code binds the file contents
+    return await _send_flow(hass, entry, call, SERVICE_SEND_MESSAGE, job=lambda _s: outgoing, params=params)
+
+
+@_audited(SERVICE_REPLY, Permission.SEND)
+async def _reply(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
+    entry = _entry(hass, call, Permission.SEND)
+    sender, sender_name = _sender(entry)
+    ref, info, limit = _ref(call.data["ref"]), entry.runtime_data.server_info, _max_bytes(entry)
+
+    def job(session: ImapSession) -> Outgoing:
+        original = load_original(session, info, ref, with_attachments=False, max_bytes=limit)
+        return reply_message(
+            original,
+            sender=sender,
+            sender_name=sender_name,
+            body_text=call.data["body_text"],
+            reply_all=call.data["reply_all"],
+            quote=call.data["quote"],
+        )
+
+    params = {k: v for k, v in call.data.items() if k not in (ATTR_CONFIG_ENTRY_ID, "confirm_token")}
+    return await _send_flow(hass, entry, call, SERVICE_REPLY, job=job, params=params)
+
+
+@_audited(SERVICE_FORWARD, Permission.SEND)
+async def _forward(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
+    entry = _entry(hass, call, Permission.SEND)
+    sender, sender_name = _sender(entry)
+    ref, info, limit = _ref(call.data["ref"]), entry.runtime_data.server_info, _max_bytes(entry)
+    try:
+        to, cc = addr_specs(call.data["to"]), addr_specs(call.data["cc"])
+    except ValueError as err:
+        raise _invalid_address() from err
+
+    def job(session: ImapSession) -> Outgoing:
+        original = load_original(session, info, ref, with_attachments=call.data["include_attachments"], max_bytes=limit)
+        return forward_message(original, sender=sender, sender_name=sender_name, to=to, cc=cc, comment=call.data["comment"])
+
+    params = {k: v for k, v in call.data.items() if k not in (ATTR_CONFIG_ENTRY_ID, "confirm_token")}
+    return await _send_flow(hass, entry, call, SERVICE_FORWARD, job=job, params=params)
+
+
+@_audited(SERVICE_SEND_DRAFT, Permission.SEND)
+async def _send_draft(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
+    entry = _entry(hass, call, Permission.SEND)
+    sender, sender_name = _sender(entry)
+    ref, info, limit = _ref(call.data["ref"]), entry.runtime_data.server_info, _max_bytes(entry)
+    drafts = entry.runtime_data.folder_map.get(FolderRole.DRAFTS)
+    if ref.folder != drafts:
+        raise ServiceValidationError(translation_domain=DOMAIN, translation_key="not_a_draft")
+
+    def job(session: ImapSession) -> Outgoing:
+        return load_draft(session, info, ref, sender=sender, sender_name=sender_name, max_bytes=limit)
+
+    params = {"ref": ref.as_dict()}
+    return await _send_flow(hass, entry, call, SERVICE_SEND_DRAFT, job=job, params=params)
+
+
 # --------------------------------------------------------------------------- registration
 
 _READ_HANDLERS: dict[str, tuple[_Handler, vol.Schema]] = {
@@ -817,6 +1144,10 @@ _WRITE_HANDLERS: dict[str, tuple[_Handler, vol.Schema]] = {
     SERVICE_TRASH: (_trash, TRASH_SCHEMA),
     SERVICE_DELETE_PERMANENTLY: (_delete_permanently, DELETE_PERMANENTLY_SCHEMA),
     SERVICE_DELETE_FOLDER: (_delete_folder, DELETE_FOLDER_SCHEMA),
+    SERVICE_SEND_MESSAGE: (_send_message, SEND_MESSAGE_SCHEMA),
+    SERVICE_REPLY: (_reply, REPLY_SCHEMA),
+    SERVICE_FORWARD: (_forward, FORWARD_SCHEMA),
+    SERVICE_SEND_DRAFT: (_send_draft, SEND_DRAFT_SCHEMA),
 }
 
 

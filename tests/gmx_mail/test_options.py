@@ -12,11 +12,14 @@ from custom_components.gmx_mail.const import (
     CONF_FOLDER_SENT,
     CONF_IDLE_RENEW_MINUTES,
     CONF_MAX_DELETE_PER_DAY,
+    CONF_MAX_MESSAGE_SIZE_MB,
     CONF_MAX_RECIPIENTS,
+    CONF_MAX_RECIPIENTS_PER_HOUR,
     CONF_MAX_SEND_PER_DAY,
     CONF_PERMISSIONS,
     CONF_POLL_INTERVAL,
     CONF_SEND_MODE,
+    CONF_SENDER_NAME,
     CONF_SENT_COPY_MODE,
     DEFAULT_OPTIONS,
     FolderRole,
@@ -139,3 +142,14 @@ def test_limits_default_to_spec_values_and_can_be_raised() -> None:
 def test_with_defaults_drops_unknown_keys() -> None:
     """Old or foreign keys do not survive."""
     assert "legacy" not in with_defaults({"legacy": True})
+
+
+def test_sending_options_m6() -> None:
+    """Sender name: whitespace collapsed, no line breaks, no <, > or quotes; hourly and size limits have defaults and ranges."""
+    options, errors = validate_options({CONF_SENDER_NAME: "  Haus \n  Assistent "})
+    assert not errors and options[CONF_SENDER_NAME] == "Haus Assistent"
+    assert options[CONF_MAX_RECIPIENTS_PER_HOUR] == 10 and options[CONF_MAX_MESSAGE_SIZE_MB] == 20
+    for bad in ('Evil" <x@evil.test>', "a" * 101, "Name\x00"):
+        assert validate_options({CONF_SENDER_NAME: bad})[1] == {"base": "invalid_sender_name"}
+    assert validate_options({CONF_MAX_MESSAGE_SIZE_MB: 101})[1] == {"base": "out_of_range"}
+    assert validate_options({CONF_MAX_RECIPIENTS_PER_HOUR: 0})[1] == {"base": "out_of_range"}

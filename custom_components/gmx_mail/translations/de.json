@@ -86,13 +86,15 @@
               "send_mode": "Versand-Modus",
               "allowlist": "Erlaubte Empfänger",
               "allow_reply_to_sender": "Antworten an den ursprünglichen Absender erlauben",
-              "sent_copy_mode": "Kopie im Ordner Gesendet"
+              "sent_copy_mode": "Kopie im Ordner Gesendet",
+              "sender_name": "Absendername"
             },
             "data_description": {
               "send_mode": "Aus: kein Versand. Allowlist: nur eingetragene Empfänger. Beliebige Empfänger: erfordert den Eintrag * in der Liste.",
               "allowlist": "Exakte Adressen oder *@domain. Eine leere Liste sperrt den Versand. * nur zusammen mit dem Modus „Beliebige Empfänger“ eintragen.",
               "allow_reply_to_sender": "Antworten an den Absender einer Nachricht auch dann, wenn er nicht auf der Allowlist steht.",
-              "sent_copy_mode": "GMX legt bei Versand über SMTP keine Kopie an, deshalb legt die Integration sie selbst ab."
+              "sent_copy_mode": "GMX legt bei Versand über SMTP keine Kopie an, deshalb legt die Integration sie selbst ab.",
+              "sender_name": "Wird als Name neben der Kontoadresse angezeigt (optional). Die Adresse ist immer die Kontoadresse."
             }
           },
           "limits_section": {
@@ -101,7 +103,13 @@
             "data": {
               "max_recipients": "Höchstzahl Empfänger je Nachricht",
               "max_send_per_day": "Höchstzahl gesendeter Nachrichten pro Tag",
-              "max_delete_per_day": "Höchstzahl Löschungen pro Tag"
+              "max_delete_per_day": "Höchstzahl Löschungen pro Tag",
+              "max_recipients_per_hour": "Maximale Empfänger pro Stunde",
+              "max_message_size_mb": "Maximale Nachrichtengröße"
+            },
+            "data_description": {
+              "max_recipients_per_hour": "GMX erlaubt Mailprogrammen angeblich etwa 11 Empfänger pro Stunde (unbestätigt); die Voreinstellung bleibt darunter.",
+              "max_message_size_mb": "Einschließlich Anhängen. GMX FreeMail erlaubt 20 MB, ProMail 50 MB, TopMail 100 MB."
             }
           },
           "connection_section": {
@@ -148,7 +156,8 @@
       "wildcard_requires_any": "Der Eintrag * ist nur mit dem Versand-Modus „Beliebige Empfänger“ erlaubt.",
       "any_requires_wildcard": "Der Versand-Modus „Beliebige Empfänger“ muss durch den Eintrag * in der Allowlist bestätigt werden.",
       "invalid_sent_copy_mode": "Unbekannter Modus für die Gesendet-Kopie.",
-      "out_of_range": "Ein Wert liegt außerhalb des erlaubten Bereichs."
+      "out_of_range": "Ein Wert liegt außerhalb des erlaubten Bereichs.",
+      "invalid_sender_name": "Der Absendername darf höchstens 100 Zeichen haben und keine <, > oder Anführungszeichen enthalten."
     }
   },
   "selector": {
@@ -309,6 +318,45 @@
     },
     "daily_delete_limit": {
       "message": "Tageslimit von {limit} gelöschten Nachrichten erreicht (heute noch {remaining} möglich)."
+    },
+    "sending_disabled": {
+      "message": "Der Versand ist für dieses Konto ausgeschaltet (Versand-Modus „aus“ oder leere Allowlist)."
+    },
+    "no_recipients": {
+      "message": "Die Nachricht hat keine Empfänger."
+    },
+    "too_many_recipients": {
+      "message": "Mehr als {limit} Empfänger pro Nachricht sind nicht erlaubt."
+    },
+    "recipient_not_allowed": {
+      "message": "{count} Empfänger sind nach Versand-Modus bzw. Allowlist nicht erlaubt (Domains: {domains})."
+    },
+    "daily_send_limit": {
+      "message": "Tageslimit von {limit} gesendeten Nachrichten erreicht."
+    },
+    "hourly_recipient_limit": {
+      "message": "Stundenlimit von {limit} Empfängern erreicht (in der laufenden Stunde noch {remaining} möglich)."
+    },
+    "attachment_not_allowed": {
+      "message": "Anhänge müssen einfache Dateinamen im Ordner gmx_mail/outbox im Medienordner sein."
+    },
+    "attachment_missing": {
+      "message": "Die Datei {name} liegt nicht im Ordner outbox (oder ist keine normale Datei)."
+    },
+    "smtp_auth_failed": {
+      "message": "GMX hat die SMTP-Anmeldung abgelehnt. Bitte die Integration neu anmelden (ein Hinweis unter Reparaturen wurde angelegt)."
+    },
+    "smtp_sender_rejected": {
+      "message": "GMX hat die Absenderadresse abgelehnt. Es wurde nichts gesendet."
+    },
+    "smtp_recipient_rejected": {
+      "message": "GMX hat mindestens einen Empfänger abgelehnt. Es wurde nichts gesendet."
+    },
+    "smtp_message_rejected": {
+      "message": "GMX hat die Nachricht abgelehnt (z. B. Größe, Inhalt oder ein Versandlimit). Es wurde nichts gesendet."
+    },
+    "not_a_draft": {
+      "message": "Mit send_draft lassen sich nur als Entwurf markierte Nachrichten aus dem Entwürfe-Ordner senden."
     }
   },
   "issues": {
@@ -327,6 +375,10 @@
     "server_rules_unavailable": {
       "title": "GMX-Filterregeln nicht verwaltbar",
       "description": "GMX bietet für die Filterregeln des Webmailers keine Schnittstelle (kein ManageSieve, per IMAP nicht sichtbar). Die Integration GMX Mail kann diese Regeln deshalb weder lesen noch ändern. Dieser Hinweis kann ignoriert werden."
+    },
+    "smtp_auth_failed": {
+      "title": "GMX hat die SMTP-Anmeldung für {account} abgelehnt",
+      "description": "Der Versand ist fehlgeschlagen, weil GMX die SMTP-Anmeldung abgelehnt hat. Das App-Passwort wurde vielleicht gelöscht oder geändert.\n\n1. Falls nötig im GMX-Konto unter Login & Sicherheit > App-Passwörter ein neues App-Passwort anlegen.\n2. Die Integration unter Einstellungen > Geräte & Dienste neu anmelden.\n\nEs wurde nichts gesendet."
     }
   },
   "services": {
@@ -721,6 +773,130 @@
         "path": {
           "name": "Ordner",
           "description": "Pfad des Ordners; Posteingang und Sonderordner sind geschützt."
+        },
+        "confirm_token": {
+          "name": "Bestätigungscode",
+          "description": "Leer lassen für die Vorschau; danach den Code aus der Vorschau übergeben (5 Minuten gültig, einmal)."
+        }
+      }
+    },
+    "send_message": {
+      "name": "Nachricht senden",
+      "description": "Sendet eine neue Nachricht. Ohne Code liefert es nur eine Vorschau und einen Bestätigungscode. Benötigt die Stufe Senden und einen Versand-Modus außer „aus“.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Der GMX-Mail-Konfigurationseintrag."
+        },
+        "to": {
+          "name": "An",
+          "description": "Empfänger (Adresse, optional mit Namen); jeder muss nach dem Versand-Modus erlaubt sein."
+        },
+        "cc": {
+          "name": "CC",
+          "description": "Kopie-Empfänger; gleiche Regeln wie An."
+        },
+        "bcc": {
+          "name": "BCC",
+          "description": "Blindkopie-Empfänger; gleiche Regeln wie An."
+        },
+        "subject": {
+          "name": "Betreff",
+          "description": "Betreffzeile."
+        },
+        "body_text": {
+          "name": "Text",
+          "description": "Nachrichtentext (reiner Text)."
+        },
+        "body_html": {
+          "name": "HTML",
+          "description": "Optionale HTML-Fassung des Textes."
+        },
+        "attachments": {
+          "name": "Anhänge",
+          "description": "Dateinamen im Ordner gmx_mail/outbox im Medienordner (keine Pfade), höchstens 20."
+        },
+        "confirm_token": {
+          "name": "Bestätigungscode",
+          "description": "Leer lassen für die Vorschau; danach den Code aus der Vorschau übergeben (5 Minuten gültig, einmal)."
+        }
+      }
+    },
+    "reply": {
+      "name": "Antworten",
+      "description": "Antwortet auf eine Nachricht (an Reply-To, sonst an den Absender) und markiert sie als beantwortet. Ohne Code nur Vorschau und Code.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Der GMX-Mail-Konfigurationseintrag."
+        },
+        "ref": {
+          "name": "Nachricht",
+          "description": "Referenz der Original-Nachricht (folder, uid, uidvalidity)."
+        },
+        "body_text": {
+          "name": "Text",
+          "description": "Antworttext; das Zitat wird darunter angefügt."
+        },
+        "reply_all": {
+          "name": "Allen antworten",
+          "description": "Auch an alle An-/CC-Empfänger des Originals (jeder muss auf der Allowlist stehen)."
+        },
+        "quote": {
+          "name": "Zitieren",
+          "description": "Den bereinigten Text des Originals zitieren (höchstens 20.000 Zeichen)."
+        },
+        "confirm_token": {
+          "name": "Bestätigungscode",
+          "description": "Leer lassen für die Vorschau; danach den Code aus der Vorschau übergeben (5 Minuten gültig, einmal)."
+        }
+      }
+    },
+    "forward": {
+      "name": "Weiterleiten",
+      "description": "Leitet eine Nachricht mit ihren Anhängen weiter. Ohne Code nur Vorschau und Code.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Der GMX-Mail-Konfigurationseintrag."
+        },
+        "ref": {
+          "name": "Nachricht",
+          "description": "Referenz der Original-Nachricht (folder, uid, uidvalidity)."
+        },
+        "to": {
+          "name": "An",
+          "description": "Empfänger der Weiterleitung; jeder muss nach dem Versand-Modus erlaubt sein."
+        },
+        "cc": {
+          "name": "CC",
+          "description": "Kopie-Empfänger; gleiche Regeln wie An."
+        },
+        "comment": {
+          "name": "Kommentar",
+          "description": "Text über der weitergeleiteten Nachricht."
+        },
+        "include_attachments": {
+          "name": "Anhänge mitsenden",
+          "description": "Die Anhänge des Originals mit weiterleiten."
+        },
+        "confirm_token": {
+          "name": "Bestätigungscode",
+          "description": "Leer lassen für die Vorschau; danach den Code aus der Vorschau übergeben (5 Minuten gültig, einmal)."
+        }
+      }
+    },
+    "send_draft": {
+      "name": "Entwurf senden",
+      "description": "Sendet einen Entwurf aus dem Entwürfe-Ordner und entfernt ihn dort. Ohne Code nur Vorschau und Code.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konto",
+          "description": "Der GMX-Mail-Konfigurationseintrag."
+        },
+        "ref": {
+          "name": "Entwurf",
+          "description": "Referenz des Entwurfs im Entwürfe-Ordner (folder, uid, uidvalidity)."
         },
         "confirm_token": {
           "name": "Bestätigungscode",

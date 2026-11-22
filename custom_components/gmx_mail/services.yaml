@@ -400,3 +400,122 @@ delete_folder:
     confirm_token:
       selector:
         text:
+
+send_message:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmx_mail
+    to:
+      example: anna@example.org
+      selector:
+        text:
+          multiple: true
+    cc:
+      selector:
+        text:
+          multiple: true
+    bcc:
+      selector:
+        text:
+          multiple: true
+    subject:
+      selector:
+        text:
+    body_text:
+      selector:
+        text:
+          multiline: true
+    body_html:
+      selector:
+        text:
+          multiline: true
+    attachments:
+      example: rechnung.pdf
+      selector:
+        text:
+          multiple: true
+    confirm_token:
+      selector:
+        text:
+
+reply:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmx_mail
+    ref:
+      required: true
+      example: '{"folder": "INBOX", "uid": 123, "uidvalidity": 456}'
+      selector:
+        object:
+    body_text:
+      required: true
+      selector:
+        text:
+          multiline: true
+    reply_all:
+      default: false
+      selector:
+        boolean:
+    quote:
+      default: true
+      selector:
+        boolean:
+    confirm_token:
+      selector:
+        text:
+
+forward:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmx_mail
+    ref:
+      required: true
+      example: '{"folder": "INBOX", "uid": 123, "uidvalidity": 456}'
+      selector:
+        object:
+    to:
+      required: true
+      example: anna@example.org
+      selector:
+        text:
+          multiple: true
+    cc:
+      selector:
+        text:
+          multiple: true
+    comment:
+      selector:
+        text:
+          multiline: true
+    include_attachments:
+      default: true
+      selector:
+        boolean:
+    confirm_token:
+      selector:
+        text:
+
+send_draft:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: gmx_mail
+    ref:
+      required: true
+      example: '{"folder": "Entwürfe", "uid": 123, "uidvalidity": 456}'
+      selector:
+        object:
+    confirm_token:
+      selector:
+        text:

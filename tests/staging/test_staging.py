@@ -28,7 +28,13 @@ import aiohttp
 import pytest
 from imapclient import IMAPClient
 
-from custom_components.gmx_mail.const import CONF_ALLOW_PERMANENT_DELETE, CONF_PERMISSIONS, DEFAULT_OPTIONS
+from custom_components.gmx_mail.const import (
+    CONF_ALLOW_PERMANENT_DELETE,
+    CONF_ALLOWLIST,
+    CONF_PERMISSIONS,
+    CONF_SEND_MODE,
+    DEFAULT_OPTIONS,
+)
 from custom_components.gmx_mail.options import nest
 
 pytestmark = pytest.mark.staging
@@ -274,6 +280,34 @@ async def test_end_to_end(staging: Staging) -> None:
         ("delete_permanently", "preview"),
         ("trash", "ok"),
     ]
+
+    # 11. M6: enable sending with an allowlist; preview + code, SMTP over STARTTLS (test CA), Sent copy; allowlist holds
+    options |= {
+        CONF_PERMISSIONS: ["read", "organize", "delete", "send"],
+        CONF_SEND_MODE: "allowlist",
+        CONF_ALLOWLIST: ["test@example.test"],
+    }
+    await _set_options(staging, entry_id, options, "send")
+    mail = {"to": ["test@example.test"], "subject": "Staging-Versand", "body_text": "Gesendet aus dem Staging-Test."}
+    preview = await staging.call("send_message", entry_id, **mail)
+    assert preview["data"]["preview"]["to"] == ["test@example.test"] and preview["data"]["preview"]["sent_copy_mode"] == "append"
+    sent = await staging.call("send_message", entry_id, **mail, confirm_token=preview["data"]["confirm_token"])
+    assert sent["data"]["recipients"] == 1 and sent["data"]["sent_copy"] == "appended" and sent["warnings"] == []
+    copies = await staging.call("search", entry_id, folder="Gesendet", subject="Staging-Versand")
+    assert len(copies["data"]["messages"]) == 1
+    try:
+        await staging.call("send_message", entry_id, to=["fremd@example.net"], body_text="x")
+        raise AssertionError("a recipient outside the allowlist must be refused")
+    except AssertionError as err:
+        assert "400" in str(err), err
+    audit = await staging.call("get_audit_log", entry_id, limit=3)
+    assert [(e["action"], e["outcome"]) for e in audit["data"]["entries"]] == [
+        ("send_message", "rejected"),
+        ("send_message", "ok"),
+        ("send_message", "preview"),
+    ]
+    assert audit["data"]["entries"][1]["recipient_domains"] == ["example.test"]
+    assert "test@example.test" not in json.dumps(audit)
 
 
 async def _set_options(staging: Staging, entry_id: str, options: dict[str, Any], expected_level: str) -> None:

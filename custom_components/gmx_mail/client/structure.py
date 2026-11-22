@@ -171,15 +171,23 @@ def _leaf(body: Sequence[Any], part_id: str) -> PartInfo:
     )
 
 
+MAX_NESTING = 20  # deeper multipart nesting is not plausible for real mail; ignore it instead of recursing
+
+
 def parse_bodystructure(body: Any, prefix: str = "") -> list[PartInfo]:
-    """Return the leaf parts of a BODYSTRUCTURE in document order with IMAP part numbers."""
-    if body is None:
+    """Return the leaf parts of a BODYSTRUCTURE in document order with IMAP part numbers.
+
+    Malformed structures (empty, wrong types, absurd nesting) yield fewer parts instead of an exception.
+    """
+    if not isinstance(body, Sequence) or isinstance(body, bytes | str) or not body or prefix.count(".") >= MAX_NESTING:
         return []
     if isinstance(body[0], list):  # multipart: [subparts], subtype, ...
         parts: list[PartInfo] = []
         for index, sub in enumerate(body[0], start=1):
             parts.extend(parse_bodystructure(sub, f"{prefix}{index}."))
         return parts
+    if len(body) < 2:
+        return []
     return [_leaf(body, prefix.rstrip(".") or "1")]
 
 

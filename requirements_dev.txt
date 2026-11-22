@@ -7,3 +7,5 @@ imapclient==4.3.0
 aioimaplib==2.0.3
 ruff>=0.17
 mypy>=2.4
+# Property-based tests (fuzzing of parsers and sanitizers, M7); test-only, not a runtime dependency.
+hypothesis==6.170.17

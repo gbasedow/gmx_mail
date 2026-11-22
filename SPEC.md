@@ -207,7 +207,7 @@ Begründungen: `docs/DECISIONS.md` Nr. 46–53.
 - **`get_status`:** `limits_used.deleted_today`. Der Sensor „Aktionen heute“ zeigt die Stufe `delete` getrennt.
 - **Speichern beim Entladen:** Zähler, Audit-Log und letzte UID (DECISIONS Nr. 53).
 - **Live-Prüfung:** `tools/gmx_live_check.py` prüft den Löschweg mit einer eigenen Testmail (Abschnitt `delete` im Bericht); das Aufräumen
-  durchsucht auch den Papierkorb. Ergebnis gegen GMX steht aus (Lauf durch den Nutzer).
+  durchsucht auch den Papierkorb. Gegen GMX am 22.11.2026 bestanden (GMX-NOTES Zeile 38).
 
 ## 4. Sensoren, Ereignisse, Repairs, Diagnose
 
@@ -332,7 +332,7 @@ Nach jeder Etappe: Tests grün, Kurzbericht, Freigabe abwarten.
 - **APPENDLIMIT** 29360128 B (≈ 28 MiB) begrenzt Entwürfe/APPEND; `save_draft` und Anhänge darauf prüfen.
 - **COPYUID bei MOVE:** ungetaggt, aber nur durch einen Messpunkt belegt (Lauf 3, `trash_move`; der zweite Messwert war wegen eines
   imaplib-Effekts nicht aussagekräftig). Implementierung muss beide Varianten und das Fehlen verkraften.
-- **Expunge im Papierkorb** gegen Dovecot geprüft; gegen GMX mit `tools/gmx_live_check.py` (Abschnitt `delete`) noch zu prüfen.
+- **Expunge im Papierkorb (erledigt):** gegen Dovecot und GMX geprüft (GMX-NOTES Zeile 38).
 - **Gesendet-Kopie (erledigt):** GMX legt per SMTP keine an (M0, Lauf 3) → `sent_copy_mode` Standard `append` (APPEND mit `\Seen` in den `\Sent`-Ordner, Message-ID der gesendeten Mail verwenden); `auto` prüft vorher per Header-Abgleich, `none` schaltet ab. Duplikate möglich, falls GMX das Verhalten ändert.
 - **Versandlimits** dynamisch und unveröffentlicht; Massentests können eine Kontosperre auslösen.
 - **SEARCH:** Indexverzögerung ≈ 30 s bei neuen Mails (M0, Lauf 2); Umlaut-Suche im Bestand noch nicht mit echten Mails geprüft.

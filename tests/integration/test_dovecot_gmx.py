@@ -159,6 +159,15 @@ async def test_worker_and_reader_with_unselect(mailer: IMAPClient, folder: str) 
         ref = MailRef(folder, result.messages[0]["ref"]["uid"], result.uidvalidity)
         content = await worker.async_run(lambda s: get_message(s, info, ref, body_format="text"), readonly=True)
         assert content.text == "Hallo,\nText mit Umlauten: äöü"
+        # RFC 3501: "1000:*" also matches the last message when no UID reaches 1000 - the server does so ...
+        mailer.select_folder(folder, readonly=True)
+        assert mailer.search(["UID", "1000:*"]) != []
+        # ... the integration drops it (found live against GMX, version 0.9.2)
+        beyond = await worker.async_run(
+            lambda s: search(s, info, folder, SearchQuery(uid_range="1000:*"), order="date_desc", limit=10, offset=0, snippet=False),
+            readonly=True,
+        )
+        assert beyond.total == 0 and beyond.messages == []
     finally:
         await worker.async_shutdown()
     mailer.select_folder(folder, readonly=True)

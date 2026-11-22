@@ -479,6 +479,32 @@ def _summaries(session: ImapSession, ref_folder: str, uidvalidity: int, uids: Se
     return result
 
 
+def uid_in_range(uid: int, uid_range: str) -> bool:
+    """Check ``uid`` against a UID set such as ``17:*`` or ``3,5:9`` as the caller means it.
+
+    IMAP reads ``*`` as the highest UID in the folder, so ``17:*`` also matches the last message when every UID
+    is below 17 (RFC 3501 6.4.8: ``17:*`` equals ``*:17``). A range with a number therefore only counts as open
+    upwards here; a lone ``*`` (the last message) is left to the server.
+    """
+    for part in uid_range.split(","):
+        if part == "*":
+            return True
+        low_text, _, high_text = part.partition(":")
+        if not high_text:
+            if uid == int(low_text):
+                return True
+            continue
+        bounds = [int(b) for b in (low_text, high_text) if b != "*"]
+        if not bounds:  # "*:*" is the last message, like "*"
+            return True
+        if len(bounds) == 1:
+            if uid >= bounds[0]:
+                return True
+        elif min(bounds) <= uid <= max(bounds):
+            return True
+    return False
+
+
 def search(
     session: ImapSession,
     info: ServerInfo,
@@ -511,6 +537,8 @@ def search(
                 uids = [*extra, *uids] if order == "date_desc" else [*uids, *reversed(extra)]
             if content_unchecked:
                 warnings.append("index_lag")
+        if query.uid_range:
+            uids = [uid for uid in uids if uid_in_range(uid, query.uid_range)]
         page = uids[offset : offset + limit]
         messages = _summaries(session, folder, uidvalidity, page, snippet=snippet)
     return SearchResult(uidvalidity=uidvalidity, total=len(uids), messages=messages, search_mode=mode, warnings=warnings)

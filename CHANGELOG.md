@@ -2,6 +2,13 @@
 
 Alle nennenswerten Änderungen je Version. Format angelehnt an „Keep a Changelog“, Versionen nach SemVer.
 
+## 0.9.2 – 22.11.2026 (Vorabversion)
+
+### Behoben
+- **Suche mit UID-Bereich:** `uid_range: "17:*"` lieferte die letzte Mail des Ordners, wenn keine Mail eine UID ab 17 hatte –
+  so legt IMAP `*` aus („höchste UID“, RFC 3501). Wer danach z. B. „alles ab UID 17“ verschoben oder gelöscht hätte, hätte eine
+  ältere Mail erwischt. Die Integration entfernt solche Treffer jetzt; ein einzelnes `*` meint weiterhin die letzte Mail.
+
 ## 0.9.1 – 22.11.2026 (Vorabversion)
 
 Korrekturen aus dem ersten Test auf einer echten Home-Assistant-Instanz mit GMX.

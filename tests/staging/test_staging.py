@@ -16,8 +16,10 @@ import asyncio
 import json
 import os
 import secrets
+import shutil
 import socket
 import ssl
+import time
 from collections.abc import AsyncIterator
 from email.message import EmailMessage
 from pathlib import Path
@@ -27,6 +29,7 @@ from urllib.parse import urlsplit
 import aiohttp
 import pytest
 from imapclient import IMAPClient
+from mcp_client import StdioMcpClient
 
 from custom_components.gmx_mail.const import (
     CONF_ALLOW_PERMANENT_DELETE,
@@ -44,6 +47,7 @@ CLIENT_ID = f"{HA_URL}/"
 MAIL_HOST = os.environ.get("DOVECOT_HOST", "127.0.0.1")
 MAIL_PORT = int(os.environ.get("DOVECOT_IMAPS_PORT", "31993"))
 USER = "user@gmx.test"
+ACTION_TIME_LIMIT_S = 20  # CLAUDE.md: actions should finish within 20 s (no documented ha-mcp limit; precaution)
 PASSWORD = "secret"
 CA_FILE = Path(__file__).parent.parent / "integration" / "certs" / "ca.crt"
 SERVER_IN_COMPOSE = {
@@ -95,8 +99,11 @@ class Staging:
                 return message["result"]
 
     async def call(self, service: str, entry_id: str, **data: Any) -> dict[str, Any]:
-        """Call a gmx_mail action like ha-mcp: return_response, config_entry_id in the data."""
+        """Call a gmx_mail action like ha-mcp: return_response, config_entry_id in the data; must finish within 20 s."""
+        started = time.monotonic()
         result = await self.rest("POST", f"/api/services/gmx_mail/{service}?return_response", {"config_entry_id": entry_id, **data})
+        elapsed = time.monotonic() - started
+        assert elapsed < ACTION_TIME_LIMIT_S, f"{service} took {elapsed:.1f} s"
         response: dict[str, Any] = result["service_response"]
         return response
 
@@ -308,6 +315,35 @@ async def test_end_to_end(staging: Staging) -> None:
     ]
     assert audit["data"]["entries"][1]["recipient_domains"] == ["example.test"]
     assert "test@example.test" not in json.dumps(audit)
+
+    # 12. ha-mcp end to end: the same actions through ha-mcp's ha_call_service, exactly as Claude calls them
+    await _via_ha_mcp(staging, entry_id)
+
+
+async def _via_ha_mcp(staging: Staging, entry_id: str) -> None:
+    ha_mcp = os.environ.get("HA_MCP_BIN") or shutil.which("ha-mcp")
+    if not ha_mcp:
+        assert not os.environ.get("REQUIRE_HA_MCP"), "ha-mcp not found (REQUIRE_HA_MCP is set)"
+        return
+    env = {"HOMEASSISTANT_URL": HA_URL, "HOMEASSISTANT_TOKEN": staging.token, "HA_MCP_DISABLE_SETTINGS_UI": "1"}
+    async with StdioMcpClient([ha_mcp], env) as mcp:
+
+        async def gmx(service: str, **data: Any) -> dict[str, Any]:
+            arguments = {"domain": "gmx_mail", "service": service, "data": {"config_entry_id": entry_id, **data}, "return_response": True}
+            return await mcp.call_tool("ha_call_service", arguments)
+
+        status = await gmx("get_status")
+        response = status["service_response"]
+        assert response["content_trust"] == "untrusted_external_email" and response["data"]["push_state"] == "connected"
+        found = await gmx("search", folder="Gesendet", subject="Staging-Versand")
+        (copy,) = found["service_response"]["data"]["messages"]
+        message = await gmx("get_message", ref=copy["ref"], max_chars=32000)
+        body = message["service_response"]["data"]["body"]
+        assert body["text"].startswith("<<<UNTRUSTED_EMAIL_CONTENT ") and "Gesendet aus dem Staging-Test." in body["text"]
+        assert len(json.dumps(message["service_response"]).encode()) <= 24 * 1024  # ha-mcp passes the envelope on unchanged
+        refused = await gmx("send_message", to=["fremd@example.net"], body_text="x")
+        assert refused["_is_error"] or refused.get("success") is False, refused
+        assert "fremd@example.net" not in json.dumps(refused)  # the refusal names domains only
 
 
 async def _set_options(staging: Staging, entry_id: str, options: dict[str, Any], expected_level: str) -> None:

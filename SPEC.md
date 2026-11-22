@@ -235,7 +235,23 @@ Begründungen: `docs/DECISIONS.md` Nr. 54–64.
   `none`. Scheitert sie, Warnung `sent_copy_failed` – die Mail wird nie erneut gesendet.
 - **Audit-Log:** `preview`, `ok`, `rejected`, `error`, `unknown` mit Empfängerzahl und Empfänger-Domains.
 - **Live-Prüfung:** `tools/gmx_live_check.py --send-self-test` (eine Mail an die eigene Adresse, Gesendet-Kopie im Modus `auto`, Ankunft im
-  Posteingang, Aufräumen). Ergebnis gegen GMX steht aus (Lauf durch den Nutzer).
+  Posteingang, Aufräumen). Gegen GMX am 22.11.2026 bestanden (GMX-NOTES Zeile 39).
+
+### Umsetzung M7 – Härtung, Dokumentation, Release (Stand 22.11.2026)
+
+Begründungen: `docs/DECISIONS.md` Nr. 65–73.
+- **Angriffssammlung** (`tests/gmx_mail/test_injection_corpus.py`): 26 Verstecktricks, unsichtbare Zeichen, getarnte Links,
+  gefälschtes Rahmenende; dazu Gegenproben, dass normale Formatierung sichtbar bleibt. Die Bereinigung wurde entsprechend erweitert (Nr. 65).
+- **Zufallstests** (`tests/gmx_mail/test_fuzz.py`, Hypothesis): Bereinigung, Kopfzeilen und kodierte Wörter, BODYSTRUCTURE, Dekodierung,
+  Adressprüfung, 24-KB-Budget. Zwei Funde behoben (Nr. 67, 73).
+- **ha-mcp Ende-zu-Ende** (`tests/staging/test_staging.py`, Schritt 12, `tests/staging/mcp_client.py`): `get_status`, `search`,
+  `get_message` und ein abgelehnter Versand über `ha_call_service` eines echten ha-mcp 9.2.0; Antwort unverändert ≤ 24 KB (Nr. 70).
+- **Zeit je Aktion** im Staging < 20 s geprüft (Nr. 71). **Einrichtungszeit** der Integration ≈ 0,8 s (Nr. 72).
+- **Sicherheitsdurchsicht:** Logs ohne Zugangsdaten (aioimaplib und imapclient schwärzen LOGIN; Debug-Logs zeigen Mailinhalte – in der
+  Anleitung vermerkt), Dateizugriffe nur `outbox` bzw. eigener Anhang-Ordner, Header-Injection blockiert, IMAP-Argumente gequotet.
+- **Logo** in `custom_components/gmx_mail/brand/` (Nr. 69). **Anleitungen** auf Deutsch (Nr. 68): README, `docs/ANLEITUNG.md`,
+  `docs/SICHERHEIT.md`, `docs/CLAUDE-REGELN.md`, `CHANGELOG.md`.
+- **Release:** 0.9.0 als Vorabversion, 1.0.0 nach Alltagsnutzung (Nr. 66).
 
 ## 4. Sensoren, Ereignisse, Repairs, Diagnose
 
@@ -347,7 +363,7 @@ Die Allowlist ist die einzige harte technische Grenze gegen Datenabfluss; Token 
   - Weiter offen (nicht M4): IMAP-Abschaltfrist bei GMX (Langzeitbeobachtung), Stundenlimit für Empfänger (M6).
 - **M5:** Löschen (`trash`, `delete_permanently` mit Token, `delete_folder`) – umgesetzt 21.11.2026, siehe §3 „Umsetzung M5“.
 - **M6:** Senden, Antworten, Weiterleiten mit Versand-Modus, Allowlist, Token und Gesendet-Strategie nach M0-Befund – umgesetzt 22.11.2026, siehe §3 „Umsetzung M6“.
-- **M7:** Härtung (Injection-Korpus, Fuzzing des MIME-Parsers), Doku, HACS-Release, ha-mcp-Ende-zu-Ende-Test auf Staging.
+- **M7:** Härtung (Injection-Korpus, Fuzzing des MIME-Parsers), Doku, HACS-Release, ha-mcp-Ende-zu-Ende-Test auf Staging. – umgesetzt 22.11.2026, siehe §3 „Umsetzung M7“.
   (Ein Staging-Test mit echtem HA 2026.11.2 im Container über die HA-APIs läuft seit 21.11.2026 in der CI, `tests/staging`;
   in M7 kommt der Aufruf über ha-mcp selbst dazu.)
 

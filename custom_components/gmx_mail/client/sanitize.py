@@ -3,7 +3,9 @@
 SPEC section 5, measure 7:
 
 * HTML to text; drop ``script``/``style``/comments and elements hidden by ``display:none``,
-  ``visibility:hidden``, ``font-size:0``, ``opacity:0``, the ``hidden`` attribute or white-on-white text;
+  ``visibility:hidden``, ``mso-hide:all``, tiny or zero font size, ``opacity:0``, zero height/width with hidden overflow,
+  off-screen positioning or indentation, clipping, transparent text or text in its background colour, the ``hidden`` and
+  ``aria-hidden`` attributes;
 * remove zero-width, bidi-control and other invisible characters;
 * links become ``[text](domain)`` - no paths, no query strings, so no tracking parameters;
 * the body is framed as untrusted content; the frame carries a random nonce per response so that a mail
@@ -92,22 +94,86 @@ def _replace_plain_urls(text: str) -> str:
 
 
 _ZERO_RE = re.compile(r"^-?(?:0+(?:\.0*)?|\.0+)(?:px|em|rem|pt|%|vh|vw)?(?:!important)?$")
+_LENGTH_RE = re.compile(r"^(-?\d*\.?\d+)(px|pt|em|rem|%|vh|vw)?$")
+_TRANSPARENT_RE = re.compile(r"^(?:transparent|rgba\([^)]*,0(?:\.0*)?\)|hsla\([^)]*,0(?:\.0*)?\)|#[0-9a-f]{6}00|#[0-9a-f]{3}0)$")
+_OFFSCREEN_PX = 500  # left/top/text-indent beyond this (negative) moves text out of view
 
 
-def _style_hides(style: str) -> bool:
-    """Return whether inline CSS makes an element invisible."""
+def _length(value: str) -> tuple[float, str] | None:
+    match = _LENGTH_RE.match(value.removesuffix("!important"))
+    return (float(match.group(1)), match.group(2) or "px") if match else None
+
+
+def _tiny_font(value: str) -> bool:
+    parsed = _length(value)
+    if parsed is None:
+        return False
+    size, unit = parsed
+    return size <= (1 if unit in ("px", "pt") else 0.1)  # 1px text is unreadable; em/rem/% relative
+
+
+def _far_negative(value: str) -> bool:
+    parsed = _length(value)
+    return parsed is not None and parsed[0] <= (-_OFFSCREEN_PX if parsed[1] in ("px", "pt") else -50)
+
+
+def _css(style: str) -> dict[str, str]:
     props: dict[str, str] = {}
     for item in style.lower().split(";"):
         key, sep, value = item.partition(":")
         if sep:
             props[key.strip()] = value.replace(" ", "").strip()
-    if props.get("display", "").startswith("none") or props.get("visibility", "").startswith(("hidden", "collapse")):
+    return props
+
+
+def _hidden_by_display(p: dict[str, str]) -> bool:
+    return (
+        p.get("display", "").startswith("none")
+        or p.get("visibility", "").startswith(("hidden", "collapse"))
+        or p.get("mso-hide", "").startswith("all")  # Outlook-specific hiding, common in mails
+    )
+
+
+def _hidden_by_size(p: dict[str, str]) -> bool:
+    if any(_ZERO_RE.match(p[key]) for key in ("font-size", "opacity", "max-height", "max-width") if key in p):
         return True
-    if any(_ZERO_RE.match(props[key]) for key in ("font-size", "opacity", "max-height", "max-width") if key in props):
+    if "font-size" in p and _tiny_font(p["font-size"]):
         return True
-    color = props.get("color", "").removesuffix("!important")
-    background = (props.get("background-color") or props.get("background") or "").removesuffix("!important")
+    overflow_hidden = p.get("overflow", "").startswith(("hidden", "clip"))
+    return overflow_hidden and any(_ZERO_RE.match(p[key]) for key in ("height", "width") if key in p)
+
+
+def _hidden_by_position(p: dict[str, str]) -> bool:
+    if p.get("position", "").startswith(("absolute", "fixed")) and any(_far_negative(p[k]) for k in ("left", "top", "right") if k in p):
+        return True
+    if "text-indent" in p and _far_negative(p["text-indent"]):
+        return True
+    clip = p.get("clip", "") + p.get("clip-path", "")
+    return bool(re.search(r"rect\(0(?:px)?,0(?:px)?,0(?:px)?,0(?:px)?\)|inset\((?:50|100)%|circle\(0", clip))
+
+
+def _hidden_by_colour(p: dict[str, str]) -> bool:
+    color = p.get("color", "").removesuffix("!important")
+    background = (p.get("background-color") or p.get("background") or "").removesuffix("!important")
+    if _TRANSPARENT_RE.match(color) or (color and background and color == background):
+        return True  # transparent text, or text in the colour of its own background
     return color in _WHITE and (not background or background in _WHITE)
+
+
+def _style_hides(style: str) -> bool:
+    """Return whether inline CSS makes an element invisible (DECISIONS Nr. 65 lists the patterns)."""
+    props = _css(style)
+    return any(check(props) for check in (_hidden_by_display, _hidden_by_size, _hidden_by_position, _hidden_by_colour))
+
+
+def _attributes_hide(tag: str, attributes: dict[str, str]) -> bool:
+    """Elements whose content a reader does not see: skipped tags, ``hidden``, ``aria-hidden``, hiding CSS."""
+    return (
+        tag in _SKIP_CONTENT
+        or "hidden" in attributes
+        or attributes.get("aria-hidden", "").strip().lower() == "true"
+        or _style_hides(attributes.get("style", ""))
+    )
 
 
 @dataclass
@@ -148,7 +214,7 @@ class _TextExtractor(HTMLParser):
                 if alt:
                     self.out.append(f"[image: {alt}]")
             return
-        hides = tag in _SKIP_CONTENT or "hidden" in attributes or _style_hides(attributes.get("style", ""))
+        hides = _attributes_hide(tag, attributes)
         if hides and tag not in _SKIP_CONTENT and not self._hidden():
             self.hidden_removed = True
         frame = _Frame(tag=tag, hidden=hides)
@@ -307,7 +373,7 @@ class _HtmlCleaner(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attributes = {key.lower(): value or "" for key, value in attrs}
         hidden_context = self._hidden()
-        hides = tag in _SKIP_CONTENT or "hidden" in attributes or _style_hides(attributes.get("style", ""))
+        hides = _attributes_hide(tag, attributes)
         if tag in _VOID:
             if not hidden_context and not hides and tag in _HTML_TAGS:
                 self.out.append(self._render(tag, attrs))

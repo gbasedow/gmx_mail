@@ -493,6 +493,8 @@ async def _get_status(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse
 _REFS = vol.All(cv.ensure_list, vol.Length(min=1, max=MAX_REFS_PER_CALL), [REF_SCHEMA])
 _FLAG_LIST = vol.All(cv.ensure_list, vol.Length(max=10), [vol.All(cv.string, vol.Length(min=1, max=65))])
 _FOLDER = vol.All(cv.string, vol.Length(min=1, max=500))
+# One header line: line breaks would allow header injection (the email library refuses them anyway).
+_SUBJECT = vol.All(cv.string, vol.Length(max=998), vol.Match(r"^[^\r\n]*\Z", msg="the subject must be a single line"))
 _ADDRESSES = vol.All(cv.ensure_list, vol.Length(max=100), [vol.All(cv.string, vol.Length(min=3, max=320))])
 
 SET_FLAGS_SCHEMA = vol.Schema(
@@ -512,7 +514,7 @@ SAVE_DRAFT_SCHEMA = vol.Schema(
         vol.Optional("to", default=list): _ADDRESSES,
         vol.Optional("cc", default=list): _ADDRESSES,
         vol.Optional("bcc", default=list): _ADDRESSES,
-        vol.Optional("subject"): vol.All(cv.string, vol.Length(max=998)),
+        vol.Optional("subject"): _SUBJECT,
         vol.Optional("body_text", default=""): vol.All(cv.string, vol.Length(max=MAX_DRAFT_TEXT)),
         vol.Optional("body_html"): vol.All(cv.string, vol.Length(max=MAX_DRAFT_TEXT)),
         vol.Optional("in_reply_to_ref"): REF_SCHEMA,
@@ -832,7 +834,7 @@ SEND_MESSAGE_SCHEMA = vol.Schema(
         vol.Optional("to", default=list): _RECIPIENTS,
         vol.Optional("cc", default=list): _RECIPIENTS,
         vol.Optional("bcc", default=list): _RECIPIENTS,
-        vol.Optional("subject", default=""): vol.All(cv.string, vol.Length(max=998)),
+        vol.Optional("subject", default=""): _SUBJECT,
         vol.Optional("body_text", default=""): _BODY,
         vol.Optional("body_html"): _BODY,
         vol.Optional("attachments", default=list): _FILE_NAMES,

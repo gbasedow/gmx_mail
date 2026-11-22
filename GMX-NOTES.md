@@ -50,6 +50,7 @@ wurde nicht gefunden. „Vollständiges Management“ bedeutet hier: alles, was 
 | 36 | SEARCH nach Message-ID | `SEARCH HEADER Message-ID <Teil>` fand die ≈ 2 min zuvor per APPEND abgelegte Mail nicht (3 Läufe). Ursache unklar: Header nicht im Suchindex oder Verzögerung > 2 min. | Live-Check 21.11.2026 | – | U | Integration sucht Message-IDs nur per FETCH der Header, nie per SEARCH; das Prüfskript ebenso (seit 21.11.2026). |
 | 37 | IDLE-Erneuerung | Mit dem IDLE-Watcher der Integration (Erneuerung nach 24 min per DONE + IDLE) blieb die Push-Verbindung 35 min ohne `BYE` und ohne Neuverbindung bestehen; Push weiter ≈ 10 s. | Live-Check 21.11.2026 (35 min) | – | ✔ | Die Erneuerung verhindert die Trennung aus Zeile 31. Der Neuverbindungsweg nach `BYE` ist nur gegen Dovecot (`doveadm kick`) geprüft. |
 | 38 | Endgültig löschen im Papierkorb | MOVE in `Gelöscht`, dann `\Deleted` + `UID EXPUNGE` genau dieser UID: Mail ist danach weg, keine Warnung. | Live-Check 22.11.2026 (M5) | – | ✔ | Löschweg der Integration (`trash`, `delete_permanently`) gegen GMX bestätigt. |
+| 39 | Versand mit dem Code der Integration | SMTP über `mail.gmx.net:587` (STARTTLS, Zertifikatsprüfung) an die eigene Adresse: angenommen, nach 3,3 s im Posteingang. Gesendet-Kopie im Modus `auto`: GMX hatte **keine** eigene Kopie → `appended`. | Live-Check 22.11.2026 (M6, `--send-self-test`) | – | ✔ | Bestätigt Zeile 22 mit dem Produktionscode; `sent_copy_mode=append` bleibt Standard. |
 
 ### Widersprüche zwischen Quellen (nicht aufgelöst)
 
@@ -125,6 +126,7 @@ Manuelle Zusatztests (nicht vom Skript abgedeckt):
   `--cleanup-only` entfernte alle Reste (2 Ordner, 3 Mails, 1 Entwurf); der 35-Minuten-Lauf lief durch, ohne Trennung (Zeile 37),
   Aufräumen vollständig (`docs/live-check-2026-11-21-idle.json`).
 - Live-Check M5 (22.11.2026, `docs/live-check-2026-11-22-m5.json`): Löschweg bestanden (Zeile 38); alle übrigen Prüfungen wie am Vortag, Aufräumen vollständig.
+- Live-Check M6 (22.11.2026, `docs/live-check-2026-11-22-m6.json`): Versand bestanden (Zeile 39); alle übrigen Prüfungen wie zuvor, Aufräumen vollständig.
 - Noch offen: Dauer der IMAP-Abschaltung (Langzeitbeobachtung).
 
 ### Ergebnisfeld (Vorlage für Folgeläufe)

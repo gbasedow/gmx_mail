@@ -1,0 +1,109 @@
+{
+  "tool": "gmx_live_check",
+  "started": "2026-11-22T10:15:11+0100",
+  "capabilities": [
+    "APPENDLIMIT=29360128",
+    "CHILDREN",
+    "ENABLE",
+    "ID",
+    "IDLE",
+    "IMAP4REV1",
+    "LIST-EXTENDED",
+    "LIST-STATUS",
+    "LITERAL-",
+    "MOVE",
+    "NAMESPACE",
+    "SASL-IR",
+    "SORT",
+    "SPECIAL-USE",
+    "THREAD=ORDEREDSUBJECT",
+    "UIDPLUS",
+    "UNSELECT",
+    "WITHIN"
+  ],
+  "special_folders": {
+    "roles": {
+      "inbox": {
+        "name": "INBOX",
+        "source": "inbox"
+      },
+      "sent": {
+        "name": "Gesendet",
+        "source": "special_use"
+      },
+      "drafts": {
+        "name": "Entw\u00fcrfe",
+        "source": "special_use"
+      },
+      "trash": {
+        "name": "Gel\u00f6scht",
+        "source": "special_use"
+      },
+      "junk": {
+        "name": "Spamverdacht",
+        "source": "special_use"
+      }
+    },
+    "ambiguous": [],
+    "invalid_overrides": []
+  },
+  "recent_after_select": {
+    "status_before": 3,
+    "on_select": 3,
+    "status_after": 0,
+    "cleared_by_select": true
+  },
+  "partial_fetch": "parsed",
+  "copy": {
+    "count": 1,
+    "new_refs_known": true,
+    "warnings": []
+  },
+  "move": {
+    "count": 1,
+    "new_refs_known": true,
+    "via_copyuid": true,
+    "warnings": []
+  },
+  "set_flags": {
+    "count": 1
+  },
+  "delete": {
+    "trashed": 1,
+    "trash_ref_known": true,
+    "preview_count": 1,
+    "deleted": 1,
+    "warnings": [],
+    "gone": true
+  },
+  "draft": {
+    "ref_known": true,
+    "size": 328,
+    "folder_role_ok": true
+  },
+  "idle": {
+    "connected": true,
+    "push_delay_s": 10.0,
+    "reconnects": 0,
+    "state_changes": [
+      [
+        0.3,
+        "connected"
+      ],
+      [
+        120.1,
+        "stopped"
+      ]
+    ],
+    "minutes": 2.0
+  },
+  "cleanup": {
+    "ok": true,
+    "errors": [],
+    "folders_deleted": 2,
+    "inbox_deleted": 1,
+    "trash_deleted": 0,
+    "drafts_deleted": 1
+  },
+  "finished": "2026-11-22T10:17:15+0100"
+}

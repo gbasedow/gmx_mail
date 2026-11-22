@@ -209,6 +209,34 @@ Begründungen: `docs/DECISIONS.md` Nr. 46–53.
 - **Live-Prüfung:** `tools/gmx_live_check.py` prüft den Löschweg mit einer eigenen Testmail (Abschnitt `delete` im Bericht); das Aufräumen
   durchsucht auch den Papierkorb. Gegen GMX am 22.11.2026 bestanden (GMX-NOTES Zeile 38).
 
+### Umsetzung M6 – Senden (Stand 22.11.2026)
+
+Begründungen: `docs/DECISIONS.md` Nr. 54–64.
+- **Allgemein** (`services.py`, `client/policy.py`, `client/composer.py`, `client/smtp.py`, `client/sent.py`): Stufe S, Versand-Modus
+  `allowlist` oder `any` (sonst `sending_disabled`), `SupportsResponse.OPTIONAL`. Jede Sendeaktion ist zweistufig:
+  - ohne `confirm_token`: `{preview: {from, to, cc, bcc, subject, size, attachments[], text_start (300 Zeichen), text_chars, sent_copy_mode},
+    confirm_token, expires_in: 300}`; nichts wird gesendet;
+  - mit Code: SMTP-Versand, danach `{message_id, recipients, sent_copy}` (+ Warnungen).
+  Der Code ist an die genauen Parameter gebunden (bei Anhängen an deren SHA-256). Ein Versand zur Zeit je Konto (Lock).
+- **Prüfungen vor dem Versand:** Empfänger vorhanden (`no_recipients`), je Mail `max_recipients` (`too_many_recipients`), Allowlist
+  (`recipient_not_allowed`, nur Anzahl und Domains), Tageslimit `max_send_per_day` (`daily_send_limit`), Stundenlimit
+  `max_recipients_per_hour` (`hourly_recipient_limit`), Größe `max_message_size_mb` und `APPENDLIMIT` (`message_too_large`), Adressen
+  (`invalid_address`, auch Header-Injection).
+- **`send_message`** (`to, cc, bcc, subject, body_text, body_html?, attachments[]`): Anhänge nur aus `<Medienordner>/gmx_mail/outbox/`
+  (`attachment_not_allowed`, `attachment_missing`). Bcc nur im SMTP-Umschlag, in der Gesendet-Kopie sichtbar.
+- **`reply`** (`ref, body_text, reply_all, quote`): an Reply-To, sonst From; Ausnahme `allow_reply_to_sender` nur für From;
+  „Re: “, In-Reply-To/References; Zitat aus bereinigtem Text (max. 20 000 Zeichen); danach `\Answered` am Original.
+- **`forward`** (`ref, to, cc, comment, include_attachments`): inline mit Kopfblock und bereinigtem Text, „Fwd: “, Original-Anhänge.
+- **`send_draft`** (`ref` im Entwürfe-Ordner, `\Draft` nötig, sonst `not_a_draft`): From = Kontoadresse, Date neu; danach Entwurf entfernt.
+- **SMTP** (`client/smtp.py`): STARTTLS/SSL mit Zertifikatsprüfung; alle Empfänger müssen angenommen werden, sonst RSET und nichts gesendet
+  (`smtp_recipient_rejected`); `smtp_sender_rejected`, `smtp_message_rejected`; Abbruch während DATA → `outcome_unknown` (gezählt, nie wiederholt).
+  Abgelehnter SMTP-Login → `smtp_auth_failed`, Repair `smtp_auth_failed` und Reauth.
+- **Gesendet-Kopie** (`sent_copy_mode`): `append` (Standard; APPEND mit `\Seen`), `auto` (zuerst Message-ID unter den neuesten 20 suchen),
+  `none`. Scheitert sie, Warnung `sent_copy_failed` – die Mail wird nie erneut gesendet.
+- **Audit-Log:** `preview`, `ok`, `rejected`, `error`, `unknown` mit Empfängerzahl und Empfänger-Domains.
+- **Live-Prüfung:** `tools/gmx_live_check.py --send-self-test` (eine Mail an die eigene Adresse, Gesendet-Kopie im Modus `auto`, Ankunft im
+  Posteingang, Aufräumen). Ergebnis gegen GMX steht aus (Lauf durch den Nutzer).
+
 ## 4. Sensoren, Ereignisse, Repairs, Diagnose
 
 - **Sensoren:** `sensor.<konto>_ungelesen_posteingang`, `sensor.<konto>_spam_anzahl`, `sensor.<konto>_letzte_synchronisation` (Timestamp),
@@ -240,7 +268,7 @@ Begründungen: `docs/DECISIONS.md` Nr. 25–32.
   „Letzte Synchronisation“ und „Aktionen heute“ (Diagnose; alle Aktionen je lokalem Tag, Attribut `by_level`, Reset um Mitternacht);
   Binärsensor „Verbindung“ (Diagnose, Attribut `push`). `get_status` liefert `push_state`, `idle_active`, `last_sync`, `limits_used`.
 - **Repairs:** `folder_mapping_ambiguous` (Platzhalter `roles`), `uidvalidity_changed`, `server_rules_unavailable` (Warnung, vom Nutzer
-  ignorierbar; HA kennt keine Info-Stufe). `smtp_auth_failed` folgt in M6 (vorher kein SMTP-Login im Betrieb).
+  ignorierbar; HA kennt keine Info-Stufe). `smtp_auth_failed` seit M6 (abgelehnter SMTP-Login beim Senden).
 - **Diagnose:** Daten ohne Adresse, Passwort, Titel und Unique-ID; Allowlist nur als Anzahl; Zähler, Push- und Verbindungsstatus.
 - **Nicht in M3:** `gmx_mail_action_executed` und Audit-Log (M4), eigener Heartbeat gegen die IMAP-Abschaltung (nicht vorgesehen).
 
@@ -318,7 +346,7 @@ Die Allowlist ist die einzige harte technische Grenze gegen Datenabfluss; Token 
   - Reconnect gegen einen echten Server – erledigt per `doveadm kick` statt kurzem Idle-Timeout (DECISIONS Nr. 44).
   - Weiter offen (nicht M4): IMAP-Abschaltfrist bei GMX (Langzeitbeobachtung), Stundenlimit für Empfänger (M6).
 - **M5:** Löschen (`trash`, `delete_permanently` mit Token, `delete_folder`) – umgesetzt 21.11.2026, siehe §3 „Umsetzung M5“.
-- **M6:** Senden, Antworten, Weiterleiten mit Versand-Modus, Allowlist, Token und Gesendet-Strategie nach M0-Befund.
+- **M6:** Senden, Antworten, Weiterleiten mit Versand-Modus, Allowlist, Token und Gesendet-Strategie nach M0-Befund – umgesetzt 22.11.2026, siehe §3 „Umsetzung M6“.
 - **M7:** Härtung (Injection-Korpus, Fuzzing des MIME-Parsers), Doku, HACS-Release, ha-mcp-Ende-zu-Ende-Test auf Staging.
   (Ein Staging-Test mit echtem HA 2026.11.2 im Container über die HA-APIs läuft seit 21.11.2026 in der CI, `tests/staging`;
   in M7 kommt der Aufruf über ha-mcp selbst dazu.)

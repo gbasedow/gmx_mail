@@ -22,7 +22,8 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
 - Stand: 21.11.2026. **M1–M3 in `main`. M4 (Organisieren, Audit-Log) freigegeben (21.11.2026) und per PR nach `main` übernommen.**
   Live-Check gegen das GMX-Testkonto (21.11.2026) bestanden: Teil-FETCH ok, COPYUID bei MOVE, SELECT löscht `\Recent`, Push ≈ 10 s.
   35-Minuten-Lauf bestanden: IDLE-Erneuerung nach 24 min hält die Verbindung ohne `BYE`. M4 ist damit abgeschlossen.
-  **M5 (Löschen) freigegeben (21.11.2026) und per PR nach `main` übernommen.** Live-Check des Löschwegs gegen GMX (22.11.2026) bestanden. Nächster Schritt: M6 (Senden) – Plan liegt vor, Umsetzung erst nach Freigabe.
+  **M5 (Löschen) freigegeben (21.11.2026) und per PR nach `main` übernommen.** Live-Check des Löschwegs gegen GMX (22.11.2026) bestanden.
+  **M6 (Senden) umgesetzt auf Branch `claude/wizardly-gauss-af5crm`, wartet auf Freigabe.** Offen aus M6: Live-Check `--send-self-test` gegen GMX (Nutzer).
   Offen: Erklärung der ha-mcp-Konfiguration (Tool Security Policies) für den Nutzer, spätestens vor dem Einschalten von Löschen/Senden.
   M0 (Live-Probe) ist abgeschlossen; Ergebnisse in `GMX-NOTES.md` (Spalte „Ergebnis“, Abschnitt 4) und `docs/probe-2026-11-20-v4.json`.
   Kern: keine Gesendet-Kopie per SMTP (→ `sent_copy_mode=append`), Suchindex ≈ 30 s verzögert, ruhende Verbindungen/IDLE nach ≈ 30 min
@@ -63,6 +64,12 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
   Tageslimit zählt Papierkorb und endgültiges Löschen; `client/deleter.py`, `confirm.py` (HMAC, 5 min, einmal, Schlüssel nur im Speicher);
   Audit-Log mit `preview`/`rejected`; Speichern von Zähler, Audit-Log und letzter UID beim Entladen. Details: SPEC §3 „Umsetzung M5“, Entscheidungen Nr. 46–53 (alle freigegeben).
   Prüfungen: 307 HA-Tests + 18 Servertests (u. a. fremde `\Deleted`-Mail im Papierkorb bleibt) + Staging (Schritt 10) grün, ruff, mypy grün.
+- **M6-Umfang:** Aktionen `send_message`, `reply`, `forward`, `send_draft` (Stufe S, Versand-Modus, immer Vorschau + Code); `client/policy.py`
+  (Allowlist, Reply-Ausnahme nur für From), `client/composer.py` (Bcc nur im Umschlag, Zitat/Weiterleitung aus bereinigtem Text),
+  `client/smtp.py` (`send_message`, nie wiederholt, `outcome_unknown` bei Abbruch in DATA), `client/sent.py` (Gesendet-Kopie, `\Answered`,
+  Entwurf entfernen); Optionen `sender_name`, `max_recipients_per_hour` (10), `max_message_size_mb` (20); Anhänge nur aus `<media>/gmx_mail/outbox/`;
+  Repair `smtp_auth_failed`. Details: SPEC §3 „Umsetzung M6“, Entscheidungen Nr. 54–64.
+  Prüfungen: 340 HA-Tests + 20 Servertests (Dovecot-Submission → GreenMail, TLS mit Test-CA) + Staging (Schritt 11) grün, ruff, mypy grün.
 - Repo-Sichtung aus Abschnitt 10 erledigt: `docs/REVIEW-REPOS-2026-11-20.md`.
 - **Noch offen:** IMAP-Abschaltfrist (Langzeitbeobachtung).
 - Alle Annahmen, die in `GMX-NOTES.md` als `U` (unbestätigt) oder `LIVE` markiert sind, nicht als Fakt behandeln.
@@ -157,12 +164,13 @@ mypy custom_components/gmx_mail
 GMX_USER=... GMX_PASS=... python3 tools/gmx_probe.py   # nur manuell, Test-Konto
 GMX_USER=... GMX_PASS=... python3 tools/gmx_live_check.py --idle-minutes 2 --output live_check.json   # nur manuell, Python 3.14: Produktionscode gegen GMX (35 min für BYE)
 GMX_USER=... GMX_PASS=... python3 tools/gmx_live_check.py --cleanup-only --output cleanup.json   # entfernt Reste früherer Live-Check-Läufe
+GMX_USER=... GMX_PASS=... python3 tools/gmx_live_check.py --send-self-test --output live_check_m6.json   # zusätzlich EINE Mail an die eigene Adresse
 ```
 
 ## 9. Meilensteine (Kurzfassung, Details in `SPEC.md`)
 
 M0 Live-Probe (erledigt) · M1 Gerüst + Flows · M2 Lesen · M3 Coordinator/IDLE/Sensoren/Diagnose/Repairs · M4 Organisieren ·
-M5 Löschen (umgesetzt) · M6 Senden · M7 Härtung, Doku, Release.
+M5 Löschen (erledigt) · M6 Senden (umgesetzt) · M7 Härtung, Doku, Release.
 
 ## 10. Gesichtete Fremdprojekte
 

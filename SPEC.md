@@ -235,7 +235,7 @@ Begründungen: `docs/DECISIONS.md` Nr. 54–64.
   `none`. Scheitert sie, Warnung `sent_copy_failed` – die Mail wird nie erneut gesendet.
 - **Audit-Log:** `preview`, `ok`, `rejected`, `error`, `unknown` mit Empfängerzahl und Empfänger-Domains.
 - **Live-Prüfung:** `tools/gmx_live_check.py --send-self-test` (eine Mail an die eigene Adresse, Gesendet-Kopie im Modus `auto`, Ankunft im
-  Posteingang, Aufräumen). Ergebnis gegen GMX steht aus (Lauf durch den Nutzer).
+  Posteingang, Aufräumen). Gegen GMX am 22.11.2026 bestanden (GMX-NOTES Zeile 39).
 
 ## 4. Sensoren, Ereignisse, Repairs, Diagnose
 

@@ -23,8 +23,8 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
   Live-Check gegen das GMX-Testkonto (21.11.2026) bestanden: Teil-FETCH ok, COPYUID bei MOVE, SELECT löscht `\Recent`, Push ≈ 10 s.
   35-Minuten-Lauf bestanden: IDLE-Erneuerung nach 24 min hält die Verbindung ohne `BYE`. M4 ist damit abgeschlossen.
   **M5 (Löschen) freigegeben (21.11.2026) und per PR nach `main` übernommen.** Live-Check des Löschwegs gegen GMX (22.11.2026) bestanden.
-  **M6 (Senden) freigegeben (22.11.2026) und per PR nach `main` übernommen.** Offen aus M6: Live-Check `--send-self-test` gegen GMX (Nutzer). Danach M7 – erst nach Freigabe.
-  Offen: Erklärung der ha-mcp-Konfiguration (Tool Security Policies) für den Nutzer, spätestens vor dem Einschalten von Löschen/Senden.
+  **M6 (Senden) freigegeben (22.11.2026) und per PR nach `main` übernommen.** Live-Check `--send-self-test` gegen GMX (22.11.2026) bestanden. Nächster Schritt: M7 – Plan liegt vor, Umsetzung erst nach Freigabe.
+  Offen: ha-mcp-Konfiguration (Tool Security Policies) gemeinsam mit dem Nutzer – nach M7 (Wunsch des Nutzers, 22.11.2026).
   M0 (Live-Probe) ist abgeschlossen; Ergebnisse in `GMX-NOTES.md` (Spalte „Ergebnis“, Abschnitt 4) und `docs/probe-2026-11-20-v4.json`.
   Kern: keine Gesendet-Kopie per SMTP (→ `sent_copy_mode=append`), Suchindex ≈ 30 s verzögert, ruhende Verbindungen/IDLE nach ≈ 30 min
   getrennt (`* BYE timeout`), `COPYUID` bei MOVE ungetaggt (2 Messpunkte), Probe v3d nutzt `UNSELECT` statt `CLOSE`.
@@ -170,7 +170,7 @@ GMX_USER=... GMX_PASS=... python3 tools/gmx_live_check.py --send-self-test --out
 ## 9. Meilensteine (Kurzfassung, Details in `SPEC.md`)
 
 M0 Live-Probe (erledigt) · M1 Gerüst + Flows · M2 Lesen · M3 Coordinator/IDLE/Sensoren/Diagnose/Repairs · M4 Organisieren ·
-M5 Löschen (erledigt) · M6 Senden (umgesetzt) · M7 Härtung, Doku, Release.
+M5 Löschen (erledigt) · M6 Senden (erledigt) · M7 Härtung, Doku, Release.
 
 ## 10. Gesichtete Fremdprojekte
 

@@ -47,6 +47,7 @@ Die ausführliche Anleitung mit allen Optionen, Aktionen und der Fehlerbehebung 
 |---|---|
 | [docs/ANLEITUNG.md](docs/ANLEITUNG.md) | Einrichtung, Optionen, Aktionen, Sensoren, Ereignisse, Fehlerbehebung |
 | [docs/SICHERHEIT.md](docs/SICHERHEIT.md) | Was die Schutzmechanismen leisten – und was nicht |
+| [docs/HA-MCP-KONFIGURATION.md](docs/HA-MCP-KONFIGURATION.md) | ha-mcp so einrichten, dass Versand und Löschen deine Freigabe brauchen |
 | [docs/CLAUDE-REGELN.md](docs/CLAUDE-REGELN.md) | Verhaltensregeln für Claude zum Einfügen in die Projektanweisungen |
 | [CHANGELOG.md](CHANGELOG.md) | Änderungen je Version |
 

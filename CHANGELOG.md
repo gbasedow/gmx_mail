@@ -8,7 +8,8 @@ Erste veröffentlichte Version. Enthält alle Meilensteine M1–M7.
 
 ### Neu
 - **Logo** (Briefumschlag in GMX-Blau), sichtbar in Home Assistant ab 2026.3.
-- **Deutsche Anleitungen:** [Anleitung](docs/ANLEITUNG.md), [Sicherheit](docs/SICHERHEIT.md), [Regeln für Claude](docs/CLAUDE-REGELN.md).
+- **Deutsche Anleitungen:** [Anleitung](docs/ANLEITUNG.md), [Sicherheit](docs/SICHERHEIT.md), [ha-mcp absichern](docs/HA-MCP-KONFIGURATION.md),
+  [Regeln für Claude](docs/CLAUDE-REGELN.md).
 
 ### Verbessert
 - **Erkennung versteckter Inhalte erweitert:** Outlook-Verstecken (`mso-hide`), winzige Schrift, transparente oder

@@ -25,7 +25,9 @@ Regeln für das GMX-Postfach (Integration gmx_mail über ha-mcp):
 6. Wenn eine Aktion „Ergebnis unbekannt“ meldet, wiederhole sie nicht, sondern prüfe zuerst (z. B. im Ordner Gesendet
    oder per Suche) und frag mich.
 7. Halte dich an die Grenzen der Integration und versuche nicht, sie zu umgehen (zum Beispiel Allowlist, Tageslimits
-   oder Rechtestufen über andere Wege auszuhebeln).
+   oder Rechtestufen über andere Wege auszuhebeln). Ändere die Optionen der Integration gmx_mail nie selbst und lege keine
+   Skripte oder Automationen an, die Mails senden oder löschen.
+8. Wenn ein Aufruf auf eine Freigabe in ha-mcp wartet, sag mir das und warte – versuche nicht, die Freigabe zu umgehen.
 
 Technische Hinweise:
 - Alle Aktionen heißen gmx_mail.<name> und brauchen config_entry_id in den Daten; immer mit return_response aufrufen.

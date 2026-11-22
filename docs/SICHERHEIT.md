@@ -19,10 +19,11 @@ außerdem das ganze Haus. Diese Seite erklärt, welche Schutzschichten es gibt u
 
 ## Was du zusätzlich tun solltest
 
-1. **Freigabe in ha-mcp einrichten:** ha-mcp kann vor bestimmten Werkzeugaufrufen deine Bestätigung verlangen („Tool Security
-   Policies“, Benutzerfreigabe). Für `ha_call_service` eingeschaltet, musst **du** jeden Aufruf bestätigen – das ist die einzige
-   Stelle, an der wirklich ein Mensch zustimmt. Den Read-Only-Modus von ha-mcp **nicht** verwenden: Er sperrt `ha_call_service`
-   komplett, also auch das Lesen von Mails.
+1. **Freigabe in ha-mcp einrichten** – Schritt für Schritt in [HA-MCP-KONFIGURATION.md](HA-MCP-KONFIGURATION.md): Mit den
+   **Tool-Sicherheitsrichtlinien** hält ha-mcp Versand und Löschen an, bis **du** sie genehmigst – die einzige Stelle, an der
+   wirklich ein Mensch zustimmt. Dazu gehört auch, die Umgehungswege zu schließen: Über **Integration aktualisieren** könnte ein
+   Assistent sonst die Optionen von GMX Mail (etwa die Allowlist) ändern, über Skripte und Automationen den Versand anstoßen.
+   Den **Nur-Lese-Modus** von ha-mcp **nicht** verwenden: Er sperrt `ha_call_service` komplett, also auch das Lesen von Mails.
 2. **Verhaltensregeln für Claude** aus [CLAUDE-REGELN.md](CLAUDE-REGELN.md) in die Projektanweisungen übernehmen.
 3. **Nur freischalten, was du brauchst.** Senden erst einschalten, wenn du es wirklich nutzen willst – und zunächst nur mit
    deiner eigenen Adresse auf der Allowlist.

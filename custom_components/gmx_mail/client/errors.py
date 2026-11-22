@@ -111,3 +111,21 @@ class GmxDeleteRuleError(GmxMailError):
         """Store a translation-key-like reason."""
         super().__init__(reason)
         self.reason = reason
+
+
+class GmxSmtpRejectedError(GmxMailError):
+    """The SMTP server refused the sender, a recipient or the message; nothing was sent (``reason`` = translation key)."""
+
+    def __init__(self, reason: str) -> None:
+        """Store a translation-key-like reason."""
+        super().__init__(reason)
+        self.reason = reason
+
+
+class GmxSendInputError(GmxMailError):
+    """The message to send is not usable as given (e.g. an invalid address in a draft); ``reason`` = translation key."""
+
+    def __init__(self, reason: str) -> None:
+        """Store a translation-key-like reason."""
+        super().__init__(reason)
+        self.reason = reason

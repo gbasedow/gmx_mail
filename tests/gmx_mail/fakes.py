@@ -422,6 +422,8 @@ class FakeMessage:
         match = _PEEK_RE.match(item)
         assert match, f"unexpected FETCH item {item!r} (reads must use BODY.PEEK)"
         section, partial = match.group(1), match.group(2)
+        if section == "":
+            return {b"BODY[]": self.header + b"".join(self.parts.values())}  # whole message (simple single-part fakes)
         if section.upper().startswith("HEADER"):
             return {f"BODY[{section}]".encode(): self.header}
         content = self.parts.get(section)
@@ -522,6 +524,11 @@ class FakeSmtpServer:
     size: str = "141557760"
     connect_error: BaseException | None = None
     sessions: list[FakeSMTP] = field(default_factory=list)
+    refused_recipients: set[str] = field(default_factory=set)
+    sender_code: int = 250
+    data_error: BaseException | None = None  # raised by DATA (e.g. a dropped connection)
+    data_code: int = 250
+    delivered: list[tuple[str, list[str], bytes]] = field(default_factory=list)
 
     def factory(self, *, implicit_tls: bool) -> Any:
         """Return a replacement for smtplib.SMTP or smtplib.SMTP_SSL."""
@@ -572,6 +579,32 @@ class FakeSMTP:
         if password != self.server.password:
             raise smtplib.SMTPAuthenticationError(535, b"Authentication credentials invalid")
         return 235, b"OK"
+
+    def mail(self, sender: str, options: Any = ()) -> tuple[int, bytes]:
+        """MAIL FROM."""
+        assert self.tls
+        self._sender, self._rcpts = sender, []
+        return self.server.sender_code, b"OK"
+
+    def rcpt(self, recipient: str, options: Any = ()) -> tuple[int, bytes]:
+        """RCPT TO."""
+        if recipient in self.server.refused_recipients:
+            return 550, b"no such user"
+        self._rcpts.append(recipient)
+        return 250, b"OK"
+
+    def rset(self) -> tuple[int, bytes]:
+        """RSET."""
+        self._rcpts = []
+        return 250, b"OK"
+
+    def data(self, msg: bytes) -> tuple[int, bytes]:
+        """DATA."""
+        if self.server.data_error is not None:
+            raise self.server.data_error
+        if self.server.data_code == 250:
+            self.server.delivered.append((self._sender, list(self._rcpts), bytes(msg)))
+        return self.server.data_code, b"queued"
 
     def quit(self) -> tuple[int, bytes]:
         """QUIT."""

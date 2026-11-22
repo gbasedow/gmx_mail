@@ -23,7 +23,7 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
   Live-Check gegen das GMX-Testkonto (21.11.2026) bestanden: Teil-FETCH ok, COPYUID bei MOVE, SELECT löscht `\Recent`, Push ≈ 10 s.
   35-Minuten-Lauf bestanden: IDLE-Erneuerung nach 24 min hält die Verbindung ohne `BYE`. M4 ist damit abgeschlossen.
   **M5 (Löschen) freigegeben (21.11.2026) und per PR nach `main` übernommen.** Live-Check des Löschwegs gegen GMX (22.11.2026) bestanden.
-  **M6 (Senden) umgesetzt auf Branch `claude/wizardly-gauss-af5crm`, wartet auf Freigabe.** Offen aus M6: Live-Check `--send-self-test` gegen GMX (Nutzer).
+  **M6 (Senden) freigegeben (22.11.2026) und per PR nach `main` übernommen.** Offen aus M6: Live-Check `--send-self-test` gegen GMX (Nutzer). Danach M7 – erst nach Freigabe.
   Offen: Erklärung der ha-mcp-Konfiguration (Tool Security Policies) für den Nutzer, spätestens vor dem Einschalten von Löschen/Senden.
   M0 (Live-Probe) ist abgeschlossen; Ergebnisse in `GMX-NOTES.md` (Spalte „Ergebnis“, Abschnitt 4) und `docs/probe-2026-11-20-v4.json`.
   Kern: keine Gesendet-Kopie per SMTP (→ `sent_copy_mode=append`), Suchindex ≈ 30 s verzögert, ruhende Verbindungen/IDLE nach ≈ 30 min
@@ -68,7 +68,7 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
   (Allowlist, Reply-Ausnahme nur für From), `client/composer.py` (Bcc nur im Umschlag, Zitat/Weiterleitung aus bereinigtem Text),
   `client/smtp.py` (`send_message`, nie wiederholt, `outcome_unknown` bei Abbruch in DATA), `client/sent.py` (Gesendet-Kopie, `\Answered`,
   Entwurf entfernen); Optionen `sender_name`, `max_recipients_per_hour` (10), `max_message_size_mb` (20); Anhänge nur aus `<media>/gmx_mail/outbox/`;
-  Repair `smtp_auth_failed`. Details: SPEC §3 „Umsetzung M6“, Entscheidungen Nr. 54–64.
+  Repair `smtp_auth_failed`. Details: SPEC §3 „Umsetzung M6“, Entscheidungen Nr. 54–64 (alle freigegeben).
   Prüfungen: 340 HA-Tests + 20 Servertests (Dovecot-Submission → GreenMail, TLS mit Test-CA) + Staging (Schritt 11) grün, ruff, mypy grün.
 - Repo-Sichtung aus Abschnitt 10 erledigt: `docs/REVIEW-REPOS-2026-11-20.md`.
 - **Noch offen:** IMAP-Abschaltfrist (Langzeitbeobachtung).

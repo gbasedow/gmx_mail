@@ -18,7 +18,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from ..const import FolderRole
-from .errors import GmxDeleteRuleError, GmxFolderNotFoundError, GmxProtectedFolderError, GmxUnsupportedError
+from .errors import GmxDeleteRuleError, GmxFolderNotFoundError, GmxProtectedFolderDeleteError, GmxUnsupportedError
 from .folders import FolderMap, parse_folder_list
 from .imap import ImapSession, ServerInfo
 from .reader import MailRef, _summaries
@@ -117,7 +117,7 @@ def check_delete_folder(session: ImapSession, folder_map: FolderMap, path: str) 
         raise GmxFolderNotFoundError("folder not found")
     special = {assignment.name for assignment in folder_map.roles.values()}
     if path.upper() == "INBOX" or path in special:
-        raise GmxProtectedFolderError("special_folder")
+        raise GmxProtectedFolderDeleteError("special_folder")
     delimiter = folder.delimiter or "/"
     if any(name.startswith(path + delimiter) for name in folders):
         raise GmxDeleteRuleError("folder_has_children")

@@ -139,7 +139,8 @@ async def test_send_message_two_steps_with_sent_copy(
     assert log[0]["action"] == "send_message" and log[0]["outcome"] == "ok"
     assert log[0]["recipient_domains"] == ["example.org", "firma.de"] and ALLOWED not in str(log)
     status = await call(hass, config_entry, "get_status")
-    assert status["data"]["limits_used"]["actions_today"]["send"] >= 1
+    # "actions today" counts each successful call once: two previews + one sending; the refused call does not count.
+    assert status["data"]["limits_used"]["actions_today"]["send"] == 3
 
 
 async def test_allowlist_blocks_and_reports_domains_only(
@@ -288,7 +289,8 @@ async def test_smtp_failures(
     assert log[0]["outcome"] == "unknown"
     status = await call(hass, config_entry, "get_status")
     assert mailbox.mailboxes["Gesendet"].messages == {}  # no Sent copy for an unknown outcome
-    assert status["data"]["limits_used"]["actions_today"].get("send", 0) >= 0
+    # two previews + the sending with an unknown outcome (it may have gone out); the failed login does not count
+    assert status["data"]["limits_used"]["actions_today"]["send"] == 3
 
 
 async def test_sent_copy_modes(
@@ -312,8 +314,29 @@ async def test_sent_copy_modes(
 async def test_subject_must_be_one_line(
     hass: HomeAssistant, config_entry: MockConfigEntry, mailbox: FakeImapServer, smtp_server: FakeSmtpServer, subject: str
 ) -> None:
-    """Line breaks in the subject are refused by the schema (header injection), also with a trailing newline."""
+    """Line breaks in the subject are refused with a translated reason (header injection), also a trailing newline."""
+    await _setup(hass, config_entry, **{CONF_PERMISSIONS: ["read", "organize", "send"]})
+    drafts_before = dict(mailbox.mailboxes["Entwürfe"].messages)
+    for service in ("send_message", "save_draft"):
+        err = await refused(hass, config_entry, service, to=[ALLOWED], subject=subject, body_text="x")
+        assert err.translation_key == "invalid_subject"
+    assert smtp_server.delivered == [] and mailbox.mailboxes["Entwürfe"].messages == drafts_before
+    log = (await call(hass, config_entry, "get_audit_log"))["data"]["entries"]
+    assert log[0]["action"] == "send_message" and log[0]["outcome"] == "rejected" and log[0]["error"] == "invalid_subject"
+    status = await call(hass, config_entry, "get_status")
+    assert "send" not in status["data"]["limits_used"]["actions_today"]
+
+
+async def test_refused_send_calls_are_not_counted(
+    hass: HomeAssistant, config_entry: MockConfigEntry, mailbox: FakeImapServer, smtp_server: FakeSmtpServer
+) -> None:
+    """A preview counts once, a sending once; calls refused after composing (allowlist, wrong code) do not count."""
     await _setup(hass, config_entry)
-    with pytest.raises(Exception, match="single line"):
-        await call(hass, config_entry, "send_message", to=[ALLOWED], subject=subject, body_text="x")
-    assert smtp_server.delivered == []
+    await refused(hass, config_entry, "send_message", to=["x@fremd.test"], body_text="x")
+    await refused(hass, config_entry, "send_message", to=[ALLOWED], body_text="x", confirm_token="falsch")
+    await refused(hass, config_entry, "reply", ref=ref(2), body_text="x")  # Reply-To outside the allowlist
+    status = await call(hass, config_entry, "get_status")
+    assert "send" not in status["data"]["limits_used"]["actions_today"]
+    await send(hass, config_entry, "reply", ref=ref(3), body_text="x")
+    status = await call(hass, config_entry, "get_status")
+    assert status["data"]["limits_used"]["actions_today"]["send"] == 2

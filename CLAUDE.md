@@ -24,7 +24,8 @@ Papierkorb/endgültiges Löschen, Entwürfe, Senden/Antworten/Weiterleiten, Spam
   35-Minuten-Lauf bestanden: IDLE-Erneuerung nach 24 min hält die Verbindung ohne `BYE`. M4 ist damit abgeschlossen.
   **M5 (Löschen) freigegeben (21.11.2026) und per PR nach `main` übernommen.** Live-Check des Löschwegs gegen GMX (22.11.2026) bestanden.
   **M6 (Senden) freigegeben (22.11.2026) und per PR nach `main` übernommen.** Live-Check `--send-self-test` gegen GMX (22.11.2026) bestanden.
-  **M7 (Härtung, Doku, Release 0.9.0) freigegeben (22.11.2026), per PR nach `main` übernommen, 0.9.0 als Vorabversion veröffentlicht.** Danach: Alltagstest, 1.0.0.
+  **M7 (Härtung, Doku, Release 0.9.0) freigegeben (22.11.2026), per PR nach `main` übernommen, 0.9.0 als Vorabversion veröffentlicht.** Intensivtest auf der Nutzerinstanz (22.11.2026, alle 21 Aktionen gegen GMX) bestanden;
+  vier Befunde behoben in **0.9.1** (Zähler „Aktionen heute“, Betreff-Fehlermeldung, Meldung beim Löschen von Spezialordnern, `\Seen`-Schreibweise; Entscheidungen Nr. 75–77). Danach: Alltagstest, 1.0.0.
   Offen: ha-mcp-Konfiguration (Tool-Sicherheitsrichtlinien) durch den Nutzer nach `docs/HA-MCP-KONFIGURATION.md` (ha-mcp 9.2.0, eingebettet).
   M0 (Live-Probe) ist abgeschlossen; Ergebnisse in `GMX-NOTES.md` (Spalte „Ergebnis“, Abschnitt 4) und `docs/probe-2026-11-20-v4.json`.
   Kern: keine Gesendet-Kopie per SMTP (→ `sent_copy_mode=append`), Suchindex ≈ 30 s verzögert, ruhende Verbindungen/IDLE nach ≈ 30 min

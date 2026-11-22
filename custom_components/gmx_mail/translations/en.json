@@ -265,6 +265,9 @@
     "protected_folder": {
       "message": "The inbox and special folders cannot be renamed and get no subfolders."
     },
+    "protected_folder_delete": {
+      "message": "The inbox and special folders (sent, drafts, trash, spam) cannot be deleted."
+    },
     "message_too_large": {
       "message": "The message is larger than the server allows (about 28 MB at GMX)."
     },
@@ -291,6 +294,9 @@
     },
     "invalid_address": {
       "message": "An address is invalid."
+    },
+    "invalid_subject": {
+      "message": "The subject must be a single line (no line breaks)."
     },
     "no_trash_folder": {
       "message": "No trash folder is known for this account. Set it in the options (folders)."
@@ -584,7 +590,7 @@
         },
         "add": {
           "name": "Add",
-          "description": "Flags to set, e.g. seen, flagged, $Tax."
+          "description": "Flags to set, e.g. seen, flagged, $Tax (\\Seen and \\Flagged as shown in search results work too)."
         },
         "remove": {
           "name": "Remove",

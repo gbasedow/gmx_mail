@@ -191,7 +191,7 @@ async def test_too_many_refs_per_call(hass: HomeAssistant, config_entry: MockCon
 async def test_delete_folder_two_steps(hass: HomeAssistant, config_entry: MockConfigEntry, mailbox: FakeImapServer) -> None:
     """Preview + code; protected folders and non-empty folders are refused."""
     await _setup(hass, config_entry)
-    assert await refused(hass, config_entry, "delete_folder", path="Gelöscht") == "protected_folder"
+    assert await refused(hass, config_entry, "delete_folder", path="Gelöscht") == "protected_folder_delete"
     mailbox.mailboxes["Archiv"].messages[1] = plain_message()
     assert await refused(hass, config_entry, "delete_folder", path="Archiv") == "folder_not_empty"
     del mailbox.mailboxes["Archiv"].messages[1]

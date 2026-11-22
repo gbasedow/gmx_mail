@@ -93,7 +93,9 @@ def test_normalize_flags() -> None:
         ["\\Seen", "\\Flagged", "\\Answered"],
         ["$Steuer", "Wichtig"],
     )
-    for bad in ("\\Deleted", "deleted", "\\Draft", "\\Recent", "a b", "x" * 70, "\\Seen", ""):
+    # the IMAP spelling shown by search results is accepted too (\\Seen), but only for the allowed system flags
+    assert normalize_flags(["\\Seen", "\\FLAGGED", " \\Answered "]) == (["\\Seen", "\\Flagged", "\\Answered"], [])
+    for bad in ("\\Deleted", "deleted", "\\Draft", "\\Recent", "a b", "x" * 70, "\\", "\\$Steuer", "\\Wichtig", ""):
         with pytest.raises(ValueError):
             normalize_flags([bad])
 

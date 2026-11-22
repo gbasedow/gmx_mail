@@ -338,7 +338,7 @@
       "message": "Hourly limit of {limit} recipients reached ({remaining} left in the current hour)."
     },
     "attachment_not_allowed": {
-      "message": "Attachments must be plain file names in the outbox folder <media>/gmx_mail/outbox."
+      "message": "Attachments must be plain file names in the outbox folder gmx_mail/outbox inside the media folder."
     },
     "attachment_missing": {
       "message": "The file {name} is not in the outbox folder (or is not a regular file)."
@@ -790,7 +790,7 @@
         },
         "to": {
           "name": "To",
-          "description": "Recipients (address or Name <address>); each must be allowed by the send mode."
+          "description": "Recipients (an address, optionally with a name); each must be allowed by the send mode."
         },
         "cc": {
           "name": "Cc",
@@ -814,7 +814,7 @@
         },
         "attachments": {
           "name": "Attachments",
-          "description": "File names in the folder <media>/gmx_mail/outbox (no paths), at most 20."
+          "description": "File names in the folder gmx_mail/outbox inside the media folder (no paths), at most 20."
         },
         "confirm_token": {
           "name": "Confirmation code",

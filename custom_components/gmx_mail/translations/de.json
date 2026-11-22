@@ -338,7 +338,7 @@
       "message": "Stundenlimit von {limit} Empfängern erreicht (in der laufenden Stunde noch {remaining} möglich)."
     },
     "attachment_not_allowed": {
-      "message": "Anhänge müssen einfache Dateinamen im Ordner <Medienordner>/gmx_mail/outbox sein."
+      "message": "Anhänge müssen einfache Dateinamen im Ordner gmx_mail/outbox im Medienordner sein."
     },
     "attachment_missing": {
       "message": "Die Datei {name} liegt nicht im Ordner outbox (oder ist keine normale Datei)."
@@ -790,7 +790,7 @@
         },
         "to": {
           "name": "An",
-          "description": "Empfänger (Adresse oder Name <Adresse>); jeder muss nach dem Versand-Modus erlaubt sein."
+          "description": "Empfänger (Adresse, optional mit Namen); jeder muss nach dem Versand-Modus erlaubt sein."
         },
         "cc": {
           "name": "CC",
@@ -814,7 +814,7 @@
         },
         "attachments": {
           "name": "Anhänge",
-          "description": "Dateinamen im Ordner <Medienordner>/gmx_mail/outbox (keine Pfade), höchstens 20."
+          "description": "Dateinamen im Ordner gmx_mail/outbox im Medienordner (keine Pfade), höchstens 20."
         },
         "confirm_token": {
           "name": "Bestätigungscode",

@@ -65,17 +65,23 @@ jobs:
           python-version: "3.14"
       - name: Install dependencies
         run: pip install -r requirements_dev.txt
+      - name: ha-mcp in its own environment (as in production; its dependencies must not mix with HA's)
+        run: |
+          python -m venv /tmp/ha-mcp
+          /tmp/ha-mcp/bin/pip install ha-mcp==9.2.0
       - name: Test certificates, wheel, containers
         run: |
           python tools/make_test_certs.py
           pip download --no-deps -d tests/staging/wheels imapclient==4.3.0
-          docker compose up -d dovecot
+          docker compose up -d greenmail dovecot
           docker compose --profile staging up -d --build homeassistant
       - name: Wait for the mail server
-        run: python tools/wait_for_test_servers.py dovecot
+        run: python tools/wait_for_test_servers.py greenmail dovecot
       - name: Staging test
         env:
           REQUIRE_STAGING: "1"
+          REQUIRE_HA_MCP: "1"
+          HA_MCP_BIN: /tmp/ha-mcp/bin/ha-mcp
         run: pytest -q -p no:homeassistant -m staging tests/staging
       - name: Home Assistant log on failure
         if: failure()

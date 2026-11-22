@@ -82,6 +82,9 @@ CONF_ALLOW_HTML_OUTPUT: Final = "allow_html_output"
 CONF_MAX_RECIPIENTS: Final = "max_recipients"
 CONF_MAX_SEND_PER_DAY: Final = "max_send_per_day"
 CONF_MAX_DELETE_PER_DAY: Final = "max_delete_per_day"
+CONF_MAX_RECIPIENTS_PER_HOUR: Final = "max_recipients_per_hour"
+CONF_MAX_MESSAGE_SIZE_MB: Final = "max_message_size_mb"
+CONF_SENDER_NAME: Final = "sender_name"
 CONF_POLL_INTERVAL: Final = "poll_interval"
 CONF_IDLE_ENABLED: Final = "idle_enabled"
 CONF_IDLE_RENEW_MINUTES: Final = "idle_renew_minutes"
@@ -113,6 +116,12 @@ FOLDER_OVERRIDE_KEYS: Final[dict[FolderRole, str]] = {
 DEFAULT_MAX_RECIPIENTS: Final = 10
 DEFAULT_MAX_SEND_PER_DAY: Final = 20
 DEFAULT_MAX_DELETE_PER_DAY: Final = 200
+# Third-party claim "max. 11 recipients per hour from a mail client" (GMX-NOTES row 20, unconfirmed) -> stay below it.
+DEFAULT_MAX_RECIPIENTS_PER_HOUR: Final = 10
+# Attachment limit of GMX FreeMail (GMX-NOTES row 19); ProMail 50 MB, TopMail 100 MB. SMTP SIZE allows ~135 MiB.
+DEFAULT_MAX_MESSAGE_SIZE_MB: Final = 20
+MAX_MESSAGE_SIZE_MB: Final = 100
+MAX_SENDER_NAME: Final = 100
 
 POLL_INTERVAL_MIN_S: Final = 60
 POLL_INTERVAL_MAX_S: Final = 3600
@@ -139,6 +148,9 @@ DEFAULT_OPTIONS: Final[dict[str, object]] = {
     CONF_MAX_RECIPIENTS: DEFAULT_MAX_RECIPIENTS,
     CONF_MAX_SEND_PER_DAY: DEFAULT_MAX_SEND_PER_DAY,
     CONF_MAX_DELETE_PER_DAY: DEFAULT_MAX_DELETE_PER_DAY,
+    CONF_MAX_RECIPIENTS_PER_HOUR: DEFAULT_MAX_RECIPIENTS_PER_HOUR,
+    CONF_MAX_MESSAGE_SIZE_MB: DEFAULT_MAX_MESSAGE_SIZE_MB,
+    CONF_SENDER_NAME: "",
     CONF_POLL_INTERVAL: DEFAULT_POLL_INTERVAL_S,
     CONF_IDLE_ENABLED: True,
     CONF_IDLE_RENEW_MINUTES: DEFAULT_IDLE_RENEW_MINUTES,
@@ -200,3 +212,4 @@ ISSUE_IMAP_POSSIBLY_DISABLED: Final = "imap_possibly_disabled"
 ISSUE_UIDVALIDITY_CHANGED: Final = "uidvalidity_changed"
 ISSUE_FOLDER_MAPPING_AMBIGUOUS: Final = "folder_mapping_ambiguous"
 ISSUE_SERVER_RULES_UNAVAILABLE: Final = "server_rules_unavailable"
+ISSUE_SMTP_AUTH_FAILED: Final = "smtp_auth_failed"

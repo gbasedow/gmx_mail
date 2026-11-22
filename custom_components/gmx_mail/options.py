@@ -25,16 +25,21 @@ from .const import (
     CONF_IDLE_ENABLED,
     CONF_IDLE_RENEW_MINUTES,
     CONF_MAX_DELETE_PER_DAY,
+    CONF_MAX_MESSAGE_SIZE_MB,
     CONF_MAX_RECIPIENTS,
+    CONF_MAX_RECIPIENTS_PER_HOUR,
     CONF_MAX_SEND_PER_DAY,
     CONF_PERMISSIONS,
     CONF_POLL_INTERVAL,
     CONF_SEND_MODE,
+    CONF_SENDER_NAME,
     CONF_SENT_COPY_MODE,
     DEFAULT_OPTIONS,
     FOLDER_OVERRIDE_KEYS,
     IDLE_RENEW_MAX_MINUTES,
     IDLE_RENEW_MIN_MINUTES,
+    MAX_MESSAGE_SIZE_MB,
+    MAX_SENDER_NAME,
     POLL_INTERVAL_MAX_S,
     POLL_INTERVAL_MIN_S,
     SECTION_CONNECTION,
@@ -51,8 +56,14 @@ from .const import (
 
 OPTION_SECTIONS: Final[dict[str, tuple[str, ...]]] = {
     SECTION_PERMISSIONS: (CONF_PERMISSIONS, CONF_ALLOW_PERMANENT_DELETE, CONF_ALLOW_HTML_OUTPUT),
-    SECTION_SENDING: (CONF_SEND_MODE, CONF_ALLOWLIST, CONF_ALLOW_REPLY_TO_SENDER, CONF_SENT_COPY_MODE),
-    SECTION_LIMITS: (CONF_MAX_RECIPIENTS, CONF_MAX_SEND_PER_DAY, CONF_MAX_DELETE_PER_DAY),
+    SECTION_SENDING: (CONF_SEND_MODE, CONF_ALLOWLIST, CONF_ALLOW_REPLY_TO_SENDER, CONF_SENDER_NAME, CONF_SENT_COPY_MODE),
+    SECTION_LIMITS: (
+        CONF_MAX_RECIPIENTS,
+        CONF_MAX_RECIPIENTS_PER_HOUR,
+        CONF_MAX_SEND_PER_DAY,
+        CONF_MAX_MESSAGE_SIZE_MB,
+        CONF_MAX_DELETE_PER_DAY,
+    ),
     SECTION_CONNECTION: (CONF_POLL_INTERVAL, CONF_IDLE_ENABLED, CONF_IDLE_RENEW_MINUTES),
     SECTION_FOLDERS: (CONF_FOLDER_SENT, CONF_FOLDER_DRAFTS, CONF_FOLDER_TRASH, CONF_FOLDER_JUNK),
     SECTION_PRIVACY: (CONF_EVENT_INCLUDE_HEADERS, CONF_AUDIT_RETENTION_DAYS, CONF_ATTACHMENT_RETENTION_DAYS),
@@ -63,6 +74,8 @@ INT_RANGES: Final[dict[str, tuple[int, int | None]]] = {
     CONF_MAX_RECIPIENTS: (1, None),
     CONF_MAX_SEND_PER_DAY: (1, None),
     CONF_MAX_DELETE_PER_DAY: (1, None),
+    CONF_MAX_RECIPIENTS_PER_HOUR: (1, None),
+    CONF_MAX_MESSAGE_SIZE_MB: (1, MAX_MESSAGE_SIZE_MB),
     CONF_POLL_INTERVAL: (POLL_INTERVAL_MIN_S, POLL_INTERVAL_MAX_S),
     CONF_IDLE_RENEW_MINUTES: (IDLE_RENEW_MIN_MINUTES, IDLE_RENEW_MAX_MINUTES),
     CONF_AUDIT_RETENTION_DAYS: (AUDIT_RETENTION_MIN_DAYS, AUDIT_RETENTION_MAX_DAYS),
@@ -115,6 +128,25 @@ def is_valid_allowlist_entry(entry: str) -> bool:
     return entry == ALLOWLIST_WILDCARD or bool(_ADDRESS_RE.match(entry) or _DOMAIN_WILDCARD_RE.match(entry))
 
 
+def _send_mode_error(send_mode: str, allowlist: list[str]) -> str | None:
+    if send_mode not in {m.value for m in SendMode}:
+        return "invalid_send_mode"
+    if any(not is_valid_allowlist_entry(e) for e in allowlist):
+        return "invalid_allowlist_entry"
+    if ALLOWLIST_WILDCARD in allowlist and send_mode != SendMode.ANY:
+        return "wildcard_requires_any"
+    if send_mode == SendMode.ANY and ALLOWLIST_WILDCARD not in allowlist:
+        return "any_requires_wildcard"  # "any" must be confirmed by explicitly entering "*" (SPEC section 5, measure 2)
+    return None
+
+
+def normalize_sender_name(value: Any) -> tuple[str, bool]:
+    """Collapse whitespace (no line breaks: header injection) and check length and characters."""
+    name = " ".join(str(value or "").split())
+    valid = len(name) <= MAX_SENDER_NAME and name.isprintable() and not any(ch in name for ch in '<>"')
+    return name, valid
+
+
 def validate_options(raw: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:
     """Normalise flat options and return ``(options, errors)``; errors map field or ``base`` to a key."""
     options = with_defaults(raw)
@@ -130,16 +162,8 @@ def validate_options(raw: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, 
 
     allowlist = normalize_allowlist(options[CONF_ALLOWLIST])
     options[CONF_ALLOWLIST] = allowlist
-    send_mode = str(options[CONF_SEND_MODE])
-    if send_mode not in {m.value for m in SendMode}:
-        errors.setdefault("base", "invalid_send_mode")
-    elif any(not is_valid_allowlist_entry(e) for e in allowlist):
-        errors.setdefault("base", "invalid_allowlist_entry")
-    elif ALLOWLIST_WILDCARD in allowlist and send_mode != SendMode.ANY:
-        errors.setdefault("base", "wildcard_requires_any")
-    elif send_mode == SendMode.ANY and ALLOWLIST_WILDCARD not in allowlist:
-        # "any" has to be confirmed by explicitly entering "*" (SPEC section 5, measure 2).
-        errors.setdefault("base", "any_requires_wildcard")
+    if send_error := _send_mode_error(str(options[CONF_SEND_MODE]), allowlist):
+        errors.setdefault("base", send_error)
 
     if str(options[CONF_SENT_COPY_MODE]) not in {m.value for m in SentCopyMode}:
         errors.setdefault("base", "invalid_sent_copy_mode")
@@ -162,6 +186,10 @@ def validate_options(raw: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, 
         CONF_EVENT_INCLUDE_HEADERS,
     ):
         options[key] = bool(options[key])
+
+    options[CONF_SENDER_NAME], valid_name = normalize_sender_name(options[CONF_SENDER_NAME])
+    if not valid_name:
+        errors.setdefault("base", "invalid_sender_name")
 
     for key in FOLDER_OVERRIDE_KEYS.values():
         options[key] = str(options[key] or "").strip()

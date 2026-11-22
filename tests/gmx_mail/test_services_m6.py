@@ -306,3 +306,14 @@ async def test_sent_copy_modes(
     done = await send(hass, config_entry, "send_message", to=[ALLOWED], body_text="y")
     assert done["data"]["sent_copy"] == "failed" and done["warnings"] == ["sent_copy_failed"]
     assert len(smtp_server.delivered) == 2
+
+
+@pytest.mark.parametrize("subject", ["Hallo\r\nBcc: evil@example.test", "Hallo\n", "Hallo\rX"])
+async def test_subject_must_be_one_line(
+    hass: HomeAssistant, config_entry: MockConfigEntry, mailbox: FakeImapServer, smtp_server: FakeSmtpServer, subject: str
+) -> None:
+    """Line breaks in the subject are refused by the schema (header injection), also with a trailing newline."""
+    await _setup(hass, config_entry)
+    with pytest.raises(Exception, match="single line"):
+        await call(hass, config_entry, "send_message", to=[ALLOWED], subject=subject, body_text="x")
+    assert smtp_server.delivered == []

@@ -19,6 +19,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from email.errors import HeaderParseError
 from email.headerregistry import Address
 from email.message import EmailMessage
 from email.policy import SMTP
@@ -353,9 +354,12 @@ def parse_addresses(values: Sequence[str]) -> list[Address]:
             raise ValueError(value)
         name, addr = parsed[0]
         local, at, domain = addr.partition("@")
-        if not at or not local or "." not in domain or " " in addr:
+        if not at or not local or "." not in domain or " " in addr or any(not label for label in domain.split(".")):
             raise ValueError(value)
-        result.append(Address(display_name=name, addr_spec=addr))
+        try:
+            result.append(Address(display_name=name, addr_spec=addr))
+        except (HeaderParseError, IndexError) as err:  # the email library raises these for odd addresses (found by fuzzing)
+            raise ValueError(value) from err
     return result
 
 

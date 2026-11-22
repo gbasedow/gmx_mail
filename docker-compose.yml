@@ -26,6 +26,8 @@ services:
       - "31993:31993"
       - "31143:31143"
       - "31587:31587"
+    depends_on:
+      - greenmail  # submission relays sent test mail to GreenMail
 
   homeassistant:
     # Staging: real Home Assistant (target version) with the integration, talking to the Dovecot test server.

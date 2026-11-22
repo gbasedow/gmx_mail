@@ -352,6 +352,66 @@ def test_trash_delete_permanently_and_delete_folder(mailer: IMAPClient, folder: 
             mailer.delete_folder(f"{folder}/Unter ü")
 
 
+def test_send_over_submission_with_sent_copy(mailer: IMAPClient) -> None:
+    """M6 against the GMX-like server: SMTP with STARTTLS and certificate check, Bcc only in the envelope,
+    then the Sent copy via APPEND (GMX stores none itself). Delivery is checked in GreenMail (Dovecot relays there)."""
+    import imaplib  # noqa: PLC0415
+
+    from custom_components.gmx_mail.client.composer import new_message  # noqa: PLC0415
+    from custom_components.gmx_mail.client.sent import store_sent_copy  # noqa: PLC0415
+    from custom_components.gmx_mail.client.smtp import send_message  # noqa: PLC0415
+
+    marker = uuid.uuid4().hex[:8]
+    outgoing = new_message(
+        sender=USER,
+        sender_name="Haus Test",
+        to=["test@example.test"],
+        cc=[],
+        bcc=["test@example.test"],
+        subject=f"Versand {marker}",
+        body_text="Grüße",
+        body_html=None,
+        attachments=[],
+    )
+    smtp = SmtpSettings(host=HOST, port=SUBMISSION_PORT, security=Security.STARTTLS, username=USER, password=PASSWORD)
+    send_message(smtp, _context(), USER, outgoing.recipients, outgoing.wire_bytes)
+    message_id = str(outgoing.message["Message-ID"])
+
+    info = check_imap_account(SETTINGS, _context())
+    session = open_imap_connection(SETTINGS, _context())
+    try:
+        assert store_sent_copy(
+            session, info, map_special_folders(info.folders), outgoing.copy_bytes, message_id=message_id, mode="append"
+        ) == ("appended")
+    finally:
+        session.logout()
+    copies = [uid for uid, subject in _subjects(mailer, "Gesendet").items() if marker in subject]
+    assert len(copies) == 1
+
+    delivered = b""
+    greenmail = imaplib.IMAP4(HOST, int(os.environ.get("GREENMAIL_IMAP_PORT", "3143")))
+    try:
+        greenmail.login("test@example.test", "secret")
+        greenmail.select("INBOX")
+        for _ in range(20):
+            _typ, found = greenmail.search(None, "HEADER", "Message-ID", message_id.strip("<>"))
+            if found and found[0]:
+                _typ, data = greenmail.fetch(found[0].split()[-1], "(BODY.PEEK[HEADER])")
+                delivered = bytes(data[0][1]) if data and isinstance(data[0], tuple) else b""
+                for num in found[0].split():
+                    greenmail.store(num, "+FLAGS", "\\Deleted")
+                greenmail.expunge()  # GreenMail test mailbox only
+                break
+            time.sleep(0.5)
+    finally:
+        greenmail.logout()
+    assert f"Versand {marker}".encode() in delivered and b"Bcc" not in delivered and b"Haus Test" in delivered
+    mailer.select_folder("Gesendet")
+    mailer.add_flags(copies, [b"\\Deleted"])
+    mailer.uid_expunge(copies)
+    mailer.unselect_folder()
+
+
 def test_draft_lands_in_entwuerfe(mailer: IMAPClient) -> None:
     """save_draft appends to Entwürfe with \\Draft and \\Seen and returns the reference (APPENDUID)."""
     from custom_components.gmx_mail.client.writer import DraftInput, save_draft  # noqa: PLC0415
@@ -498,8 +558,21 @@ def test_live_check_tool_survives_a_dropped_connection() -> None:
         "folders_deleted": 2,
         "inbox_deleted": 1,
         "trash_deleted": 0,
+        "sent_deleted": 0,
         "drafts_deleted": 1,
     }
+    _no_live_check_leftovers()
+
+
+def test_live_check_send_self_test() -> None:
+    """--send-self-test: one message to the own address over the TLS-verified submission port, Sent copy, clean-up.
+    (Dovecot relays to GreenMail, so the message does not come back into this INBOX - arrival stays None here.)"""
+    report = _live_check(
+        "--idle-minutes", "0.1", "--send-self-test", "--smtp-host", HOST, "--smtp-port", str(SUBMISSION_PORT), "--arrival-timeout", "2"
+    )
+    assert "aborted" not in report
+    assert report["send"] == {"sent": True, "sent_copy": "appended", "arrived_after_s": None}
+    assert report["cleanup"]["ok"] and report["cleanup"]["sent_deleted"] == 1
     _no_live_check_leftovers()
 
 
@@ -517,7 +590,15 @@ def test_live_check_cleanup_only_removes_just_its_own_leftovers(mailer: IMAPClie
     mailer.append("Entwürfe", message("<keep-draft@gmx.test>", "gmx_mail live check draft"))  # not flagged \Draft
     try:
         report = _live_check("--cleanup-only")["cleanup_only"]
-        assert report == {"ok": True, "errors": [], "folders_deleted": 2, "inbox_deleted": 1, "trash_deleted": 0, "drafts_deleted": 1}
+        assert report == {
+            "ok": True,
+            "errors": [],
+            "folders_deleted": 2,
+            "inbox_deleted": 1,
+            "trash_deleted": 0,
+            "sent_deleted": 0,
+            "drafts_deleted": 1,
+        }
         for folder, kept in (("INBOX", b"keep-inbox@example.org"), ("Entwürfe", b"keep-draft@gmx.test")):
             mailer.select_folder(folder, readonly=True)
             found = mailer.fetch(mailer.search(["ALL"]), ["BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)]"])

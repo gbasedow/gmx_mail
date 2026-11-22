@@ -163,12 +163,17 @@ def _message_ids(session: ImapSession, uids: Sequence[int]) -> dict[int, str]:
 
 
 def normalize_flags(names: Sequence[str]) -> tuple[list[str], list[str]]:
-    """Return ``(system_flags, keywords)``; raises ValueError for anything not allowed (e.g. \\Deleted)."""
+    """Return ``(system_flags, keywords)``; raises ValueError for anything not allowed (e.g. \\Deleted).
+
+    System flags are accepted as ``seen`` or in the IMAP spelling ``\\Seen`` that search results show.
+    """
     system: list[str] = []
     keywords: list[str] = []
     for raw in names:
         name = raw.strip()
-        if name.lower() in SYSTEM_FLAGS:
+        if name.startswith("\\") and name[1:].lower() in SYSTEM_FLAGS:
+            system.append(SYSTEM_FLAGS[name[1:].lower()])
+        elif name.lower() in SYSTEM_FLAGS:
             system.append(SYSTEM_FLAGS[name.lower()])
         elif KEYWORD_RE.match(name) and name.lower().lstrip("$") not in RESERVED_KEYWORDS:
             keywords.append(name)

@@ -111,7 +111,7 @@ Je Konto entsteht ein Gerät mit diesen Entitäten:
 | Ungelesen im Posteingang | Anzahl ungelesener Mails |
 | Spam-Nachrichten | Anzahl Mails im Spam-Ordner |
 | Letzte Synchronisation | Zeitpunkt der letzten erfolgreichen Abfrage |
-| Aktionen heute | Ausgeführte Aktionen des Tages, Attribut „Nach Rechtestufe“ |
+| Aktionen heute | Erfolgreiche Aufrufe des Tages (Vorschau und Versand zählen je einmal, abgelehnte Aufrufe nicht), Attribut „Nach Rechtestufe“ |
 | Verbindung | an/aus; Attribut „Push (IDLE)“ zeigt den Push-Zustand |
 
 **Ereignisse für Automationen:**
@@ -147,7 +147,7 @@ Antwortdaten zurück (in Skripten mit `response_variable`, über ha-mcp mit `ret
 | `get_attachment` | Lesen | Anhang speichern (Medienordner) oder kleine Anhänge als base64 |
 | `get_status` | Lesen | Serverfähigkeiten, Spezialordner, Zähler, aktive Einstellungen, verbrauchte Limits |
 | `get_audit_log` | Lesen | Letzte schreibende Aktionen ohne Inhalte |
-| `set_flags` | Organisieren | gelesen, Fähnchen, beantwortet, eigene Schlüsselwörter (z. B. `$Steuer`) |
+| `set_flags` | Organisieren | gelesen, Fähnchen, beantwortet (`seen`, `flagged`, `answered` oder `\Seen` usw.), eigene Schlüsselwörter (z. B. `$Steuer`) |
 | `move` / `copy` | Organisieren | Verschieben/Kopieren, liefert neue Referenzen |
 | `mark_spam` / `mark_not_spam` | Organisieren | In den Spam-Ordner bzw. zurück in den Posteingang |
 | `create_folder` / `rename_folder` | Organisieren | Ordner anlegen/umbenennen; Spezialordner sind geschützt |

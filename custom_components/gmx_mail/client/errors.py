@@ -100,6 +100,10 @@ class GmxProtectedFolderError(GmxMailError):
     """Special folders and INBOX cannot be renamed, and get no subfolders."""
 
 
+class GmxProtectedFolderDeleteError(GmxProtectedFolderError):
+    """INBOX and special folders cannot be deleted."""
+
+
 class GmxMessageTooLargeError(GmxMailError):
     """The message exceeds the server's APPENDLIMIT."""
 

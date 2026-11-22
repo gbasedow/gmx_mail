@@ -265,6 +265,9 @@
     "protected_folder": {
       "message": "Posteingang und Spezialordner können nicht umbenannt werden und erhalten keine Unterordner."
     },
+    "protected_folder_delete": {
+      "message": "Der Posteingang und die Spezialordner (Gesendet, Entwürfe, Papierkorb, Spam) können nicht gelöscht werden."
+    },
     "message_too_large": {
       "message": "Die Nachricht ist größer als der Server erlaubt (bei GMX etwa 28 MB)."
     },
@@ -291,6 +294,9 @@
     },
     "invalid_address": {
       "message": "Eine Adresse ist ungültig."
+    },
+    "invalid_subject": {
+      "message": "Der Betreff muss einzeilig sein (keine Zeilenumbrüche)."
     },
     "no_trash_folder": {
       "message": "Für dieses Konto ist kein Papierkorb bekannt. Bitte in den Optionen (Ordner) festlegen."
@@ -584,7 +590,7 @@
         },
         "add": {
           "name": "Setzen",
-          "description": "Markierungen, die gesetzt werden, z. B. seen, flagged, $Steuer."
+          "description": "Markierungen, die gesetzt werden, z. B. seen, flagged, $Steuer (auch \\Seen und \\Flagged wie in den Suchergebnissen)."
         },
         "remove": {
           "name": "Entfernen",

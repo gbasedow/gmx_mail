@@ -2,6 +2,22 @@
 
 Alle nennenswerten Änderungen je Version. Format angelehnt an „Keep a Changelog“, Versionen nach SemVer.
 
+## 0.9.1 – 22.11.2026 (Vorabversion)
+
+Korrekturen aus dem ersten Test auf einer echten Home-Assistant-Instanz mit GMX.
+
+### Behoben
+- **„Aktionen heute“ zählte Sendeaktionen doppelt** (Zusammenstellen und Senden) und zählte auch Aufrufe mit, die danach
+  abgelehnt wurden (Empfänger nicht erlaubt, falscher Bestätigungscode). Jetzt zählt jeder erfolgreiche Aufruf genau einmal –
+  Vorschau und Versand je einmal. Die Versandlimits (Mails pro Tag, Empfänger pro Stunde) waren nicht betroffen.
+- **Betreff mit Zeilenumbruch:** Die Ablehnung kam über ha-mcp nur als „400: Bad Request“ an; jetzt mit verständlicher Meldung
+  („Der Betreff muss einzeilig sein“). Betrifft `send_message` und `save_draft`.
+- **Spezialordner löschen:** Die Ablehnung sprach von „umbenennen/Unterordner“; jetzt eine eigene Meldung zum Löschen.
+
+### Verbessert
+- `set_flags` nimmt Markierungen auch in der Schreibweise an, die die Suche zurückgibt (`\Seen`, `\Flagged`, `\Answered`),
+  nicht nur `seen`, `flagged`, `answered`. `\Deleted` und `\Draft` bleiben gesperrt.
+
 ## 0.9.0 – 22.11.2026 (Vorabversion)
 
 Erste veröffentlichte Version. Enthält alle Meilensteine M1–M7.

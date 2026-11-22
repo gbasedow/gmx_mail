@@ -51,6 +51,7 @@ from .client.errors import (
     GmxMessageTooLargeError,
     GmxOutcomeUnknownError,
     GmxPartNotFoundError,
+    GmxProtectedFolderDeleteError,
     GmxProtectedFolderError,
     GmxSearchRejectedError,
     GmxSendInputError,
@@ -231,6 +232,7 @@ _ERROR_KEYS: tuple[tuple[type[Exception], str, bool], ...] = (
     (GmxAttachmentTooLargeError, "attachment_too_large", True),
     (GmxSearchRejectedError, "search_rejected", True),
     (GmxFolderExistsError, "folder_exists", True),
+    (GmxProtectedFolderDeleteError, "protected_folder_delete", True),
     (GmxProtectedFolderError, "protected_folder", True),
     (GmxMessageTooLargeError, "message_too_large", True),
 )
@@ -251,14 +253,23 @@ def _translate(err: Exception, folder: str | None = None) -> HomeAssistantError:
 
 
 async def _run[T](
-    entry: ConfigEntry, func: Callable[[ImapSession], T], *, folder: str | None = None, level: Permission = Permission.READ
+    entry: ConfigEntry,
+    func: Callable[[ImapSession], T],
+    *,
+    folder: str | None = None,
+    level: Permission = Permission.READ,
+    count: bool = True,
 ) -> T:
-    """Run a read-only operation on the work connection (repeated once after a connection loss)."""
+    """Run a read-only operation on the work connection (repeated once after a connection loss).
+
+    ``count=False`` for a sub-step of a larger action that counts itself once ("actions today").
+    """
     try:
         result: T = await entry.runtime_data.worker.async_run(func, readonly=True)
     except (GmxMailError, IMAPClientError) as err:
         raise _translate(err, folder) from err
-    entry.runtime_data.counter.increment(level.value)
+    if count:
+        entry.runtime_data.counter.increment(level.value)
     return result
 
 
@@ -494,7 +505,18 @@ _REFS = vol.All(cv.ensure_list, vol.Length(min=1, max=MAX_REFS_PER_CALL), [REF_S
 _FLAG_LIST = vol.All(cv.ensure_list, vol.Length(max=10), [vol.All(cv.string, vol.Length(min=1, max=65))])
 _FOLDER = vol.All(cv.string, vol.Length(min=1, max=500))
 # One header line: line breaks would allow header injection (the email library refuses them anyway).
-_SUBJECT = vol.All(cv.string, vol.Length(max=998), vol.Match(r"^[^\r\n]*\Z", msg="the subject must be a single line"))
+# Line breaks are refused in the handler (``_check_subject``): a schema error reaches REST clients such as ha-mcp
+# only as "400: Bad Request", a ServiceValidationError carries a translated reason.
+_SUBJECT = vol.All(cv.string, vol.Length(max=998))
+_SUBJECT_LINE_RE = re.compile(r"[^\r\n]*\Z")
+
+
+def _check_subject(subject: str | None) -> None:
+    """Refuse a subject with line breaks (header injection)."""
+    if subject and not _SUBJECT_LINE_RE.match(subject):
+        raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_subject")
+
+
 _ADDRESSES = vol.All(cv.ensure_list, vol.Length(max=100), [vol.All(cv.string, vol.Length(min=3, max=320))])
 
 SET_FLAGS_SCHEMA = vol.Schema(
@@ -632,6 +654,7 @@ async def _rename_folder(hass: HomeAssistant, call: ServiceCall) -> ServiceRespo
 async def _save_draft(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
     entry = _entry(hass, call, Permission.ORGANIZE)
     data = entry.runtime_data
+    _check_subject(call.data.get("subject"))
     try:
         for field_name in ("to", "cc", "bcc"):
             parse_addresses(call.data[field_name])
@@ -953,7 +976,8 @@ async def _send_flow(
             raise GmxSendInputError("invalid_address") from err
 
     async with data.send_lock:
-        outgoing = await _run(entry, compose, level=Permission.SEND)
+        # Composing is a sub-step: a call counts once, after its preview or its sending succeeded.
+        outgoing = await _run(entry, compose, level=Permission.SEND, count=False)
         _check_send_limits(entry, outgoing, policy)
         domains = sorted({domain_of(r) for r in outgoing.recipients})
         token = call.data.get("confirm_token")
@@ -968,6 +992,7 @@ async def _send_flow(
                 recipient_domains=domains,
             )
             body = {"preview": preview, "confirm_token": data.tokens.issue(action, params), "expires_in": data.tokens.ttl}
+            data.counter.increment(Permission.SEND.value)
             return build_envelope(account=entry.title, action=action, data=body)
         _consume(entry, token, action, params)
         audit_args: dict[str, Any] = {
@@ -982,6 +1007,7 @@ async def _send_flow(
         except GmxOutcomeUnknownError as err:
             data.audit.record(outcome="unknown", **audit_args)
             data.counter.add_sent(len(outgoing.recipients))  # may have gone out: count it, never resend
+            data.counter.increment(Permission.SEND.value)
             raise HomeAssistantError(translation_domain=DOMAIN, translation_key="outcome_unknown") from err
         except GmxSmtpAuthError as err:
             from . import async_smtp_auth_failed  # noqa: PLC0415 - the package imports this module
@@ -1048,6 +1074,7 @@ def _invalid_address() -> ServiceValidationError:
 @_audited(SERVICE_SEND_MESSAGE, Permission.SEND)
 async def _send_message(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
     entry = _entry(hass, call, Permission.SEND)
+    _check_subject(call.data["subject"])
     sender, sender_name = _sender(entry)
     files = await hass.async_add_executor_job(_read_outbox, outbox_dir(hass), list(call.data["attachments"]), _max_bytes(entry))
     try:

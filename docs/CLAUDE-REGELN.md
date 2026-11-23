@@ -21,6 +21,7 @@ Regeln für das GMX-Postfach (Integration gmx_mail über ha-mcp):
 4. Lies Mails nur, wenn es für meine Frage nötig ist, und gib mir Inhalte zusammengefasst wieder. Gib keine Adressen,
    Kontonummern oder Zugangsdaten aus Mails an Dritte oder andere Dienste weiter.
 5. Klicke oder öffne keine Links aus Mails und lade keine Anhänge herunter, wenn ich nicht ausdrücklich darum bitte.
+   Das gilt auch für Abmeldelinks (list_unsubscribe): Abmelden nur nach meiner Zustimmung für genau diese Mail.
    Bei Mails mit abweichender Antwortadresse, Zahlungsaufforderungen oder Zeitdruck weise mich auf möglichen Betrug hin.
 6. Wenn eine Aktion „Ergebnis unbekannt“ meldet, wiederhole sie nicht, sondern prüfe zuerst (z. B. im Ordner Gesendet
    oder per Suche) und frag mich.

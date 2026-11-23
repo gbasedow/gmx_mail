@@ -190,6 +190,7 @@ GET_MESSAGE_SCHEMA = vol.Schema(
         vol.Optional("max_chars", default=DEFAULT_MAX_CHARS): vol.All(vol.Coerce(int), vol.Range(min=100, max=MAX_MAX_CHARS)),
         vol.Optional("offset", default=0): vol.All(vol.Coerce(int), vol.Range(min=0)),
         vol.Optional("headers", default=list): vol.All(cv.ensure_list, vol.Length(max=10), [vol.Match(_HEADER_NAME_RE)]),
+        vol.Optional("header_offset", default=0): vol.All(vol.Coerce(int), vol.Range(min=0, max=10_000_000)),
     }
 )
 GET_ATTACHMENT_SCHEMA = vol.Schema(
@@ -406,7 +407,14 @@ async def _get_message(hass: HomeAssistant, call: ServiceCall) -> ServiceRespons
     ref = _ref(call.data["ref"])
     content = await _run(
         entry,
-        lambda s: get_message(s, info, ref, body_format=call.data["format"], extra_headers=call.data["headers"]),
+        lambda s: get_message(
+            s,
+            info,
+            ref,
+            body_format=call.data["format"],
+            extra_headers=call.data["headers"],
+            header_offset=call.data["header_offset"],
+        ),
         folder=ref.folder,
     )
     offset: int = call.data["offset"]

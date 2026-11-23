@@ -23,6 +23,9 @@ from custom_components.gmx_mail.client.folders import map_special_folders, parse
 from custom_components.gmx_mail.client.imap import ImapSession, ServerInfo, parse_capabilities
 from custom_components.gmx_mail.client.reader import (
     CLIENT_SORT_MAX_UIDS,
+    HEADER_REQUEST_BUDGET,
+    HEADER_REQUEST_MAX,
+    LIST_UNSUBSCRIBE_MAX,
     MailRef,
     SearchQuery,
     decode_charset,
@@ -342,7 +345,8 @@ def test_get_message_extra_headers_auth_and_unsubscribe(server: FakeImapServer) 
     assert content.headers["x-mailer"] == ["Test"]
     assert "x-missing" not in content.headers
     assert content.auth_results == ["mx.gmx.net; dkim=pass"]
-    assert content.list_unsubscribe == {"domains": ["mailto", "unsub.example.com"]}
+    # not requested: domains only, as for links in the text (no tokens for the assistant)
+    assert content.list_unsubscribe == {"domains": ["mailto", "unsub.example.com"], "one_click": False}
 
 
 def test_get_message_without_text_body(server: FakeImapServer) -> None:
@@ -466,3 +470,106 @@ def test_search_drops_last_message_outside_uid_range(server: FakeImapServer) -> 
     server.search_hook = lambda folder, criteria, charset: [11, 12]
     result = _search(server, SearchQuery(uid_range="11:*"))
     assert result.total == 2 and [m["ref"]["uid"] for m in result.messages] == [12, 11]
+
+
+def _unsubscribe_message(server: FakeImapServer, uid: int, extra_headers: str) -> MailRef:
+    server.mailbox("INBOX").messages[uid] = plain_message(extra_headers=extra_headers)
+    return MailRef("INBOX", uid, 777)
+
+
+LONG_URL = "https://unsub.example.com/u?token=" + "Ab1-" * 400  # 1634 characters, like real tracking tokens
+
+
+def test_list_unsubscribe_very_long_url_is_never_cut(server: FakeImapServer) -> None:
+    """A List-Unsubscribe URL of more than 1500 characters comes back complete (it was cut at 500 with "…")."""
+    assert len(LONG_URL) > 1500
+    ref = _unsubscribe_message(server, 40, f"List-Unsubscribe: <{LONG_URL}>\r\n")
+    content = get_message(_session(server), _info(), ref, body_format="text", extra_headers=["List-Unsubscribe"])
+    assert content.headers["list-unsubscribe"] == [f"<{LONG_URL}>"]
+    assert content.list_unsubscribe == {"domains": ["unsub.example.com"], "one_click": False, "urls": [LONG_URL], "mailto": []}
+    assert "…" not in str(content.headers)
+
+
+def test_list_unsubscribe_several_urls_mailto_and_one_click(server: FakeImapServer) -> None:
+    """Several entries in angle brackets are split; mailto keeps its query; one-click from List-Unsubscribe-Post."""
+    mailto = "mailto:unsub@lists.example.org?subject=unsubscribe%20me&body=x%0Ay"
+    ref = _unsubscribe_message(
+        server,
+        41,
+        f"List-Unsubscribe: <https://a.example.com/u?t=1>, <{mailto}>,<http://b.example.net/x?y=%0A>\r\n"
+        "List-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n",
+    )
+    content = get_message(_session(server), _info(), ref, body_format="text", extra_headers=["list-unsubscribe", "List-Unsubscribe-Post"])
+    assert content.list_unsubscribe == {
+        "domains": ["a.example.com", "b.example.net", "mailto"],
+        "one_click": True,
+        "urls": ["https://a.example.com/u?t=1", "http://b.example.net/x?y=%0A"],  # %0A stays encoded
+        "mailto": [mailto],
+    }
+    assert content.headers["list-unsubscribe-post"] == ["List-Unsubscribe=One-Click"]
+
+
+def test_list_unsubscribe_folded_header(server: FakeImapServer) -> None:
+    """A folded header (RFC 5322 line break plus whitespace, also inside the brackets) is unfolded, not decoded."""
+    ref = _unsubscribe_message(
+        server,
+        42,
+        "List-Unsubscribe: <mailto:u@lists.example.org?subject=unsub>,\r\n"
+        " <https://c.example.com/unsubscribe?id=12345&sig=abc%2Fdef\r\n\t&x=1>\r\n",
+    )
+    content = get_message(_session(server), _info(), ref, body_format="text", extra_headers=["List-Unsubscribe"])
+    assert content.list_unsubscribe is not None
+    assert content.list_unsubscribe["urls"] == ["https://c.example.com/unsubscribe?id=12345&sig=abc%2Fdef&x=1"]
+    assert content.list_unsubscribe["mailto"] == ["mailto:u@lists.example.org?subject=unsub"]
+    (value,) = content.headers["list-unsubscribe"]
+    assert isinstance(value, str) and "\n" not in value and "\r" not in value and "%2F" in value
+
+
+def test_list_unsubscribe_missing(server: FakeImapServer) -> None:
+    """Without the header there is neither a header entry nor a list_unsubscribe field."""
+    ref = _unsubscribe_message(server, 43, "X-Other: 1\r\n")
+    content = get_message(_session(server), _info(), ref, body_format="text", extra_headers=["List-Unsubscribe"])
+    assert "list-unsubscribe" not in content.headers
+    assert content.list_unsubscribe is None
+
+
+def test_long_other_header_is_marked_and_can_be_continued(server: FakeImapServer) -> None:
+    """Above 8000 characters another header is cut visibly (truncated, total_chars) and continues at next_offset."""
+    long_value = "".join(f"{i:05d}," for i in range(2000))  # 12000 characters
+    ref = _unsubscribe_message(server, 44, f"X-Long: {long_value}\r\n")
+    first = get_message(_session(server), _info(), ref, body_format="text", extra_headers=["X-Long"])
+    (entry,) = first.headers["x-long"]
+    assert entry == {
+        "value": long_value[:HEADER_REQUEST_MAX],
+        "truncated": True,
+        "total_chars": 12000,
+        "offset": 0,
+        "next_offset": HEADER_REQUEST_MAX,
+    }
+    rest = get_message(_session(server), _info(), ref, body_format="text", extra_headers=["X-Long"], header_offset=HEADER_REQUEST_MAX)
+    (tail,) = rest.headers["x-long"]
+    assert tail["value"] == long_value[HEADER_REQUEST_MAX:] and tail["truncated"] is False and tail["next_offset"] is None
+    assert entry["value"] + tail["value"] == long_value
+
+
+def test_requested_headers_share_a_budget_but_list_unsubscribe_comes_first(server: FakeImapServer) -> None:
+    """All requested headers together at most HEADER_REQUEST_BUDGET characters; List-Unsubscribe is not counted."""
+    values = {name: name[-1] * 7000 for name in ("X-A", "X-B", "X-C")}
+    headers = "".join(f"{name}: {value}\r\n" for name, value in values.items()) + f"List-Unsubscribe: <{LONG_URL}>\r\n"
+    ref = _unsubscribe_message(server, 45, headers)
+    content = get_message(_session(server), _info(), ref, body_format="text", extra_headers=["X-A", "X-B", "X-C", "List-Unsubscribe"])
+    assert content.headers["x-a"] == [values["X-A"]] and content.headers["x-b"] == [values["X-B"]]
+    (third,) = content.headers["x-c"]
+    assert third["truncated"] is True and len(third["value"]) == HEADER_REQUEST_BUDGET - 14000 and third["total_chars"] == 7000
+    assert content.headers["list-unsubscribe"] == [f"<{LONG_URL}>"]
+
+
+def test_list_unsubscribe_emergency_brake(server: FakeImapServer) -> None:
+    """A crafted header beyond 16000 characters is cut visibly, never silently; a cut entry is dropped."""
+    urls = [f"https://u{i}.example.com/" + "x" * 3000 for i in range(8)]  # about 24800 characters
+    ref = _unsubscribe_message(server, 46, "List-Unsubscribe: " + ", ".join(f"<{u}>" for u in urls) + "\r\n")
+    content = get_message(_session(server), _info(), ref, body_format="text", extra_headers=["List-Unsubscribe"])
+    (entry,) = content.headers["list-unsubscribe"]
+    assert entry["truncated"] is True and len(entry["value"]) == LIST_UNSUBSCRIBE_MAX and entry["next_offset"] == LIST_UNSUBSCRIBE_MAX
+    assert content.list_unsubscribe is not None and content.list_unsubscribe["truncated"] is True
+    assert content.list_unsubscribe["urls"] == urls[:5]  # the sixth entry is cut in the middle and left out

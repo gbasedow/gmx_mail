@@ -2,6 +2,19 @@
 
 Alle nennenswerten Änderungen je Version. Format angelehnt an „Keep a Changelog“, Versionen nach SemVer.
 
+## 0.9.3 – 23.11.2026 (Vorabversion)
+
+### Behoben
+- **Lange Kopfzeilen wurden abgeschnitten:** Über `headers` angeforderte Kopfzeilen wurden nach 500 Zeichen mit „…“ gekürzt –
+  bei `List-Unsubscribe` mit langen Kennungen (700 bis über 1000 Zeichen) war die Abmeldeadresse damit unbrauchbar.
+  Jetzt: entfaltet und vollständig bis 8000 Zeichen je Kopfzeile (zusammen 20 000), `List-Unsubscribe` und
+  `List-Unsubscribe-Post` bis 16 000. Längere Werte werden sichtbar gekennzeichnet (`truncated`, `total_chars`,
+  `next_offset`) und lassen sich mit dem neuen Feld `header_offset` weiterlesen.
+
+### Verbessert
+- `list_unsubscribe` enthält zusätzlich `one_click` (RFC 8058) und – nur wenn `List-Unsubscribe` angefordert wird – die
+  vollständigen Adressen als `urls` und `mailto`. Ohne Anforderung bleibt es bei den Domains. Die Integration ruft die Adressen nie auf.
+
 ## 0.9.2 – 22.11.2026 (Vorabversion)
 
 ### Behoben

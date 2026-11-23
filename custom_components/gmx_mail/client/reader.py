@@ -32,7 +32,7 @@ from .errors import (
 )
 from .folders import FolderMap, parse_folder_list
 from .imap import CONNECTION_ERRORS, ImapSession, ServerInfo
-from .sanitize import clean_inline, link_domain, sanitize_body, sanitize_html
+from .sanitize import clean_inline, link_domain, sanitize_body, sanitize_html, strip_invisible
 from .structure import PartInfo, attachments, find_text_parts, parse_bodystructure
 
 SUMMARY_HEADERS = ("DATE", "FROM", "TO", "CC", "SUBJECT", "MESSAGE-ID")
@@ -47,7 +47,15 @@ MAX_TEXT_PART_BYTES = 2 * 1024 * 1024
 CLIENT_SORT_MAX_UIDS = 2000
 RECENT_WINDOW = timedelta(minutes=2)
 RECENT_MAX = 50
-MAX_HEADER_VALUE = 500
+MAX_HEADER_VALUE = 500  # standard headers (subject, message id, ...) and Authentication-Results
+# Headers requested with ``headers``: shortened only with an explicit marker (value, truncated, total_chars,
+# next_offset); the rest is fetched with ``header_offset``.
+HEADER_REQUEST_MAX = 8000  # characters per header value
+HEADER_REQUEST_BUDGET = 20000  # all requested headers together (List-Unsubscribe not counted)
+LIST_UNSUBSCRIBE_MAX = 16000  # List-Unsubscribe(-Post): never shortened below this (emergency brake only)
+_LIST_UNSUBSCRIBE_HEADERS = ("list-unsubscribe", "list-unsubscribe-post")
+_LINE_BREAK_RE = re.compile(r"\r\n|\r|\n")
+_ANGLE_RE = re.compile(r"<([^<>]*)>")
 
 _PART_ID_RE = re.compile(r"^[1-9]\d{0,3}(?:\.[1-9]\d{0,3}){0,9}$")
 
@@ -569,6 +577,77 @@ def _load_message(session: ImapSession, ref: MailRef, items: Sequence[str]) -> d
     return data
 
 
+def unfold_header(value: str) -> str:
+    """Unfold a header value (RFC 5322 2.2.3: line breaks removed, the whitespace after them kept).
+
+    Invisible and control characters are removed as everywhere else; nothing is decoded (``%0A`` stays ``%0A``),
+    whitespace is not collapsed and nothing is shortened.
+    """
+    return strip_invisible(_LINE_BREAK_RE.sub("", value).replace("\t", " ")).strip()
+
+
+def header_entry(value: str, offset: int, limit: int) -> str | dict[str, Any]:
+    """Return a header value, or - if it is cut or read from an offset - an explicitly marked part of it."""
+    total = len(value)
+    chunk = value[offset : offset + max(0, limit)]
+    end = min(offset, total) + len(chunk)
+    if offset == 0 and end >= total:
+        return value
+    return {
+        "value": chunk,
+        "truncated": end < total,
+        "total_chars": total,
+        "offset": offset,
+        "next_offset": end if end < total else None,
+    }
+
+
+def parse_list_unsubscribe(values: Sequence[str], post_values: Sequence[str], *, full: bool) -> dict[str, Any]:
+    """Split List-Unsubscribe (RFC 2369) into its entries; full addresses only if ``full`` (explicitly requested).
+
+    Entries are the ``<...>`` parts, separated by commas, also across folded lines. Whitespace inside the angle
+    brackets is ignored (RFC 2369 section 2); the addresses are neither decoded nor called.
+    """
+    joined = ", ".join(unfold_header(v) for v in values)
+    truncated = len(joined) > LIST_UNSUBSCRIBE_MAX
+    if truncated:
+        joined = joined[:LIST_UNSUBSCRIBE_MAX]  # an entry cut in the middle has no ">" and is dropped
+    targets = [t for t in ("".join(m.split()) for m in _ANGLE_RE.findall(joined)) if t]
+    one_click = any(unfold_header(v).lower() == "list-unsubscribe=one-click" for v in post_values)
+    result: dict[str, Any] = {"domains": sorted({link_domain(t) for t in targets}), "one_click": one_click}
+    if full:
+        result["urls"] = [t for t in targets if t.lower().startswith(("https://", "http://"))]
+        result["mailto"] = [t for t in targets if t.lower().startswith("mailto:")]
+    if truncated:
+        result["truncated"] = True
+    return result
+
+
+def requested_headers(msg: EmailMessage, names: Sequence[str], offset: int) -> dict[str, list[str | dict[str, Any]]]:
+    """Values of the headers requested with ``headers`` (lower-case names, each occurrence one entry).
+
+    List-Unsubscribe(-Post) up to LIST_UNSUBSCRIBE_MAX characters, others up to HEADER_REQUEST_MAX each and
+    HEADER_REQUEST_BUDGET together; anything beyond is marked, never cut silently.
+    """
+    unique = list(dict.fromkeys(name.lower() for name in names))
+    unique.sort(key=lambda name: name not in _LIST_UNSUBSCRIBE_HEADERS)  # never cut by the shared budget
+    budget = HEADER_REQUEST_BUDGET
+    result: dict[str, list[str | dict[str, Any]]] = {}
+    for name in unique:
+        entries: list[str | dict[str, Any]] = []
+        for raw in msg.get_all(name) or []:
+            value = unfold_header(str(raw))
+            if name in _LIST_UNSUBSCRIBE_HEADERS:
+                entries.append(header_entry(value, offset, LIST_UNSUBSCRIBE_MAX))
+                continue
+            entry = header_entry(value, offset, min(HEADER_REQUEST_MAX, budget))
+            budget -= len(entry) if isinstance(entry, str) else len(entry["value"])
+            entries.append(entry)
+        if entries:
+            result[name] = entries
+    return result
+
+
 def get_message(
     session: ImapSession,
     info: ServerInfo,
@@ -576,6 +655,7 @@ def get_message(
     *,
     body_format: BodyFormat,
     extra_headers: Sequence[str] = (),
+    header_offset: int = 0,
 ) -> MessageContent:
     """Load headers, the readable text and the attachment list of one message."""
     with examine(session, info, ref.folder) as uidvalidity:
@@ -626,16 +706,16 @@ def get_message(
     if reply_to:
         # Observation only (SPEC section 5, measure 7): a different Reply-To is a classic phishing trick.
         headers["reply_to"] = reply_to
-    for name in extra_headers:
-        values = [clean_inline(str(v), MAX_HEADER_VALUE) for v in (msg.get_all(name) or [])]
-        if values:
-            headers[name.lower()] = values
+    headers.update(requested_headers(msg, extra_headers, header_offset))
     auth = [clean_inline(str(v), MAX_HEADER_VALUE) for v in (msg.get_all("authentication-results") or [])][:3]
-    unsubscribe = msg.get("list-unsubscribe")
+    unsubscribe = [str(v) for v in msg.get_all("list-unsubscribe") or []]
     list_unsubscribe = None
-    if unsubscribe is not None:
-        targets = re.findall(r"<([^>]+)>", str(unsubscribe))
-        list_unsubscribe = {"domains": sorted({link_domain(t) for t in targets})}
+    if unsubscribe:
+        # Full addresses only when the caller asked for the header itself (it then gets the raw value anyway);
+        # otherwise domains only, as for links in the text (SPEC section 5, DECISIONS no. 79).
+        full = any(name.lower() == "list-unsubscribe" for name in extra_headers)
+        post = [str(v) for v in msg.get_all("list-unsubscribe-post") or []]
+        list_unsubscribe = parse_list_unsubscribe(unsubscribe, post, full=full)
 
     attachment_list = [
         {"part_id": p.part_id, "filename": p.filename, "mime": p.mime, "size": p.size, "inline": p.inline} for p in attachments(parts)

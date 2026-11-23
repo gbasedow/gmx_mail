@@ -139,9 +139,17 @@ get_message:
           max: 100000000
           mode: box
     headers:
+      example: '["List-Unsubscribe", "List-Unsubscribe-Post"]'
       selector:
         text:
           multiple: true
+    header_offset:
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 10000000
+          mode: box
 
 get_attachment:
   fields:

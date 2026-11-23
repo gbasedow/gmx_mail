@@ -162,6 +162,33 @@ Antwortdaten zurück (in Skripten mit `response_variable`, über ha-mcp mit `ret
 
 Alle Felder sind in Home Assistant unter **Entwicklerwerkzeuge → Aktionen** beschrieben.
 
+### Weitere Kopfzeilen und Abmeldelinks (`get_message`)
+
+- Mit `headers` (höchstens 10 Namen) liefert `get_message` weitere Kopfzeilen unter `data.headers`, Namen in Kleinbuchstaben,
+  je Vorkommen ein Eintrag. Die Werte sind **entfaltet** (Zeilenumbrüche gefalteter Kopfzeilen entfernt), sonst unverändert:
+  nichts wird dekodiert (`%0A` bleibt `%0A`), nur unsichtbare Zeichen und Steuerzeichen werden entfernt.
+- **Grenzen:** 8000 Zeichen je Kopfzeile und 20 000 für alle angeforderten Kopfzeilen zusammen; `List-Unsubscribe` und
+  `List-Unsubscribe-Post` bis 16 000 Zeichen (zählen nicht zur Gesamtgrenze). Übliche Abmeldelinks sind viel kürzer.
+- **Längere Werte** werden nie still gekürzt. Statt des Textes kommt ein Objekt
+  `{"value": "…Teil…", "truncated": true, "total_chars": 12000, "offset": 0, "next_offset": 8000}`. Den Rest liefert ein
+  weiterer Aufruf mit denselben `headers` und `header_offset: 8000`.
+- **`list_unsubscribe`** erscheint, wenn die Mail eine `List-Unsubscribe`-Kopfzeile hat:
+  - immer: `domains` (nur die Domains) und `one_click` (`true`, wenn `List-Unsubscribe-Post: List-Unsubscribe=One-Click` gesetzt ist);
+  - nur wenn `List-Unsubscribe` in `headers` angefordert wird zusätzlich die vollständigen Adressen: `urls` (http/https) und
+    `mailto`. Ohne Anforderung bleiben Links wie im Text auf die Domain beschränkt, denn Abmeldelinks enthalten persönliche Kennungen.
+  - Die Integration ruft diese Adressen **nie** auf und prüft sie nicht; sie sind Daten aus einer fremden Mail.
+
+Beispiel:
+
+```yaml
+action: gmx_mail.get_message
+data:
+  config_entry_id: <Konto-ID>
+  ref: {folder: INBOX, uid: 123, uidvalidity: 456}
+  headers: [List-Unsubscribe, List-Unsubscribe-Post]
+  max_chars: 200
+```
+
 ## 6. Zwei-Schritt-Bestätigung
 
 Endgültiges Löschen, Ordner löschen und jeder Versand laufen in zwei Schritten:

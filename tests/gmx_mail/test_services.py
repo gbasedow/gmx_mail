@@ -176,6 +176,37 @@ async def test_get_message_pagination_and_budget(hass: HomeAssistant, loaded_ent
     assert beyond["data"]["body"]["next_offset"] is None
 
 
+async def test_get_message_list_unsubscribe_end_to_end(
+    hass: HomeAssistant, loaded_entry: MockConfigEntry, imap_server: FakeImapServer
+) -> None:
+    """Through the action (as ha-mcp calls it): full URLs only on request, long headers marked and continued, read only."""
+    url = "https://unsub.example.com/u?token=" + "Zz9_" * 400
+    long_value = "y" * 9000
+    imap_server.mailbox("INBOX").messages[60] = plain_message(
+        extra_headers=(
+            f"List-Unsubscribe: <{url}>,\r\n <mailto:u@lists.example.org?subject=unsub>\r\n"
+            f"List-Unsubscribe-Post: List-Unsubscribe=One-Click\r\nX-Long: {long_value}\r\n"
+        )
+    )
+    ref = {"folder": "INBOX", "uid": 60, "uidvalidity": 777}
+    plain = await call(hass, loaded_entry, SERVICE_GET_MESSAGE, ref=ref)
+    assert plain["data"]["list_unsubscribe"] == {"domains": ["mailto", "unsub.example.com"], "one_click": True}
+    assert "list-unsubscribe" not in plain["data"]["headers"]
+
+    full = await call(hass, loaded_entry, SERVICE_GET_MESSAGE, ref=ref, headers=["List-Unsubscribe", "X-Long"])
+    assert full["content_trust"] == "untrusted_external_email"  # header values stay marked as mail content
+    assert full["data"]["list_unsubscribe"]["urls"] == [url]
+    assert full["data"]["list_unsubscribe"]["mailto"] == ["mailto:u@lists.example.org?subject=unsub"]
+    assert full["data"]["headers"]["list-unsubscribe"] == [f"<{url}>, <mailto:u@lists.example.org?subject=unsub>"]
+    (cut,) = full["data"]["headers"]["x-long"]
+    assert cut["truncated"] is True and cut["total_chars"] == 9000 and cut["next_offset"] == 8000
+    rest = await call(hass, loaded_entry, SERVICE_GET_MESSAGE, ref=ref, headers=["X-Long"], header_offset=8000)
+    assert rest["data"]["headers"]["x-long"][0]["value"] == "y" * 1000
+    assert full["data"]["body"]["text"].startswith("<<<UNTRUSTED_EMAIL_CONTENT ")  # body unchanged
+    assert b"\\Seen" not in imap_server.mailbox("INBOX").messages[60].flags
+    assert all(readonly for c in imap_server.commands if c[0] == "select" for readonly in c[2:3])
+
+
 async def test_get_message_errors(hass: HomeAssistant, loaded_entry: MockConfigEntry) -> None:
     """Invalid references are validation errors."""
     cases = [

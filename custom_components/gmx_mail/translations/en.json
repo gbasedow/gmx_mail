@@ -522,7 +522,11 @@
         },
         "headers": {
           "name": "Additional headers",
-          "description": "Names of further headers to return."
+          "description": "Names of further headers to return (at most 10). Values are unfolded and complete up to 8000 characters each, 20000 together; List-Unsubscribe and List-Unsubscribe-Post up to 16000. A longer value comes as an object with value, truncated, total_chars and next_offset. Requesting List-Unsubscribe also adds the full addresses (urls, mailto) to list_unsubscribe."
+        },
+        "header_offset": {
+          "name": "Header offset",
+          "description": "Character position in the requested header values to continue from (next_offset of a truncated header)."
         }
       }
     },

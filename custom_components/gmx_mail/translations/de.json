@@ -522,7 +522,11 @@
         },
         "headers": {
           "name": "Weitere Kopfzeilen",
-          "description": "Namen weiterer Kopfzeilen, die geliefert werden sollen."
+          "description": "Namen weiterer Kopfzeilen (höchstens 10). Werte kommen entfaltet und vollständig bis 8000 Zeichen je Kopfzeile, zusammen 20000; List-Unsubscribe und List-Unsubscribe-Post bis 16000. Ein längerer Wert kommt als Objekt mit value, truncated, total_chars und next_offset. Wird List-Unsubscribe angefordert, enthält list_unsubscribe zusätzlich die vollständigen Adressen (urls, mailto)."
+        },
+        "header_offset": {
+          "name": "Startposition Kopfzeilen",
+          "description": "Zeichenposition in den angeforderten Kopfzeilen zum Fortsetzen (next_offset einer gekürzten Kopfzeile)."
         }
       }
     },

@@ -95,7 +95,7 @@ Lesen: `SupportsResponse.ONLY`; Schreiben: `SupportsResponse.OPTIONAL`.
 |---|---|---|---|---|
 | `list_folders` | `include_counts`(false) | `folders[{name, path, role, delimiter, flags, messages?, unseen?}]` | R | LIST-STATUS, falls verfügbar |
 | `search` | `folder`(INBOX), `from, to, cc, subject, text, body, since, before, seen, flagged, answered, draft, larger, smaller, keyword, uid_range`, `sort`(date_desc), `limit`(20, max 50), `cursor` | `messages[{ref, date, from, to[<=5], subject<=200, size, flags, has_attachments, snippet<=160?}]`, `page` | R | Umlaut-Suche über `CHARSET UTF-8`; bei Ablehnung Warnung + ASCII-Fallback. **M0: GMX indexiert neue Mails mit ≈ 30 s Verzögerung** (Bestandssuche schnell: 0,5–1,5 s bei ~3400 Mails). Antwort enthält `search_mode`. Die Verzögerung betrifft **alle Textkriterien** (BODY/TEXT und auch SUBJECT/FROM; Lauf 3: SUBJECT später als BODY). Fallback: Mails mit INTERNALDATE in den letzten ~2 min (max. 50) per FETCH der Header holen und nur Header-Kriterien (`from, to, cc, subject`) clientseitig prüfen; BODY/TEXT werden nicht nachgebildet, stattdessen Warnung `index_lag`. Sortierung per SORT, sonst clientseitig über max. 2000 UIDs. Fehler: `folder_not_found`, `search_rejected` |
-| `get_message` | `ref`, `format`(text\|html_as_text\|html\|raw_headers), `max_chars`(8000, max 32000), `offset`(0), `headers`(Standardliste) | `headers{…}, body{text, chars_total, truncated, next_offset}, attachments[{part_id, filename, mime, size, inline}], auth_results?, list_unsubscribe?` | R | setzt **nicht** `\Seen` (BODY.PEEK) |
+| `get_message` | `ref`, `format`(text\|html_as_text\|html\|raw_headers), `max_chars`(8000, max 32000), `offset`(0), `headers`(Standardliste), `header_offset`(0) | `headers{…}, body{text, chars_total, truncated, next_offset}, attachments[{part_id, filename, mime, size, inline}], auth_results?, list_unsubscribe?` | R | setzt **nicht** `\Seen` (BODY.PEEK) |
 | `get_attachment` | `ref`, `part_id`, `mode`(save\|base64), `max_bytes`(10 MB) | `{path, filename, size, sha256}` bzw. `{base64}` wenn <= 256 KB | R | speichert nur unter `/media/gmx_mail/<entry>/`, Dateiname bereinigt |
 | `get_status` | – | `{capabilities, folders_map, unseen_inbox, last_sync, idle_active, limits_used}` | R | – |
 | `get_audit_log` | `limit`(50) | `entries[…]` ohne Inhalte | R | – |
@@ -137,7 +137,9 @@ Abweichungen und Präzisierungen gegenüber der Tabelle oben (Begründung: `docs
 - **`get_message`:** Text bevorzugt `text/plain` (`format=text`) bzw. `text/html` (`html_as_text`); Textteile > 2 MB werden nur
   anteilig geladen (`body_truncated_at_source`). Der Text steht zwischen `<<<UNTRUSTED_EMAIL_CONTENT <nonce>` und
   `>>>END_UNTRUSTED_EMAIL_CONTENT <nonce>`; die Zufallskennung gilt je Antwort, Markierungen im Mailtext werden entschärft.
-  Warnungen `hidden_content_removed`, `invisible_characters_removed`, `no_text_body`. `List-Unsubscribe` nur als Domainliste.
+  Warnungen `hidden_content_removed`, `invisible_characters_removed`, `no_text_body`. `List-Unsubscribe`: `list_unsubscribe{domains, one_click}`; vollständige `urls`/`mailto` nur, wenn `List-Unsubscribe` in
+  `headers` angefordert ist. Angeforderte Kopfzeilen entfaltet, bis 8000 Zeichen je Wert und 20 000 zusammen (List-Unsubscribe[-Post] bis
+  16 000), darüber als `{value, truncated, total_chars, offset, next_offset}`, Rest per `header_offset` (DECISIONS Nr. 79).
 - **`format=html`** (DECISIONS Nr. 24): bereinigtes HTML im ursprünglichen Layout, nur wenn die Option `allow_html_output`
   (Voreinstellung aus) eingeschaltet ist, sonst Fehler `html_output_disabled`. Positivliste für Tags (Text, Überschriften, Listen,
   Tabellen, Links, `img`) und Attribute (`href` nur `http`/`https`/`mailto`, `img` nur `alt` – nie `src`, `colspan`/`rowspan`, `start`).
